@@ -30,7 +30,7 @@ def workflow_example():
     documents_to_process = [
         "esg_social_ethical_questionnaire.xlsx",
         "pdf_esg_social_ethical_questionnaire.pdf",
-        
+        "questionnaire.docx"
     ]
     
     # Filter to existing documents

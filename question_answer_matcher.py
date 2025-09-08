@@ -35,7 +35,7 @@ QUESTIONS_JSON_PATH = "pdf_esg_social_ethical_questionnaire_extracted_questions.
 QA_PAIRS_JSON_PATH = "pdf-qa-generator/output/qa_pairs.json"  # Change this
 
 # Number of top answers to find for each question
-TOP_K_ANSWERS = 3y
+TOP_K_ANSWERS = 3
 
 # =============================================================================
 
