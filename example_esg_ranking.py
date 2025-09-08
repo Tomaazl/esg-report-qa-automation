@@ -10,7 +10,7 @@ def main() -> None:
         "What steps are you taking to increase diversity and pay equity?",
     ]
 
-    ranker = ESGAnswerRanker()
+    ranker = ESGAnswerRanker(qa_pairs_path="/workspace/pdf-qa-generator/output/qa_pairs.json")
     results = ranker.rank_answer_candidates(questions, top_k=3)
 
     for i, (question, suggestions) in enumerate(zip(questions, results), start=1):
