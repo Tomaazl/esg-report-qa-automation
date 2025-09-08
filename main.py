@@ -21,7 +21,7 @@ class QAItem:
 def load_q_a(knowledge_base_path: str) -> List[QAItem]:
 	with open(knowledge_base_path, "r", encoding="utf-8") as f:
 		raw = json.load(f)
-
+	raw = raw.get("qa_pairs", raw)
 	items: List[QAItem] = []
 
 	if isinstance(raw, dict):
@@ -47,7 +47,7 @@ def load_q_a(knowledge_base_path: str) -> List[QAItem]:
 			if q and a:
 				items.append(QAItem(question=q, answer=a))
 	else:
-		raise ValueError("Unsupported q_a.json format. Use either {question: answer} or a list of {question, answer} objects.")
+		raise ValueError("Unsupported qa_pairs.json format. Use either {question: answer} or a list of {question, answer} objects.")
 
 	return items
 
@@ -201,7 +201,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 		"-k",
 		"--kb",
 		type=str,
-		default="q_a.json",
+		default="pdf-qa-generator/output/qa_pairs.json",
 		help="Path to knowledge base JSON (list[{question, answer}] or {question: answer}).",
 	)
 	parser.add_argument(
