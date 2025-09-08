@@ -356,7 +356,7 @@ def main():
             st.subheader("📋 Summary - Best Matches")
             st.dataframe(
                 summary_df,
-                use_container_width=True,
+                width='stretch',
                 height=400
             )
             
@@ -380,9 +380,90 @@ def main():
                 st.subheader("🔍 All Matches Detail")
                 st.dataframe(
                     detailed_df,
-                    use_container_width=True,
+                    width='stretch',
                     height=600
                 )
+            
+            # Question-Answer Display Section
+            if st.checkbox("📖 Show Question-Answer Format"):
+                st.subheader("📖 Questions with Answer Candidates")
+                st.markdown("*Each question is shown as a header with answer candidates listed below.*")
+                
+                # Create expandable sections for better organization
+                display_mode = st.radio(
+                    "Display Mode:",
+                    ["All Questions", "Questions with Matches Only", "Top Scoring Questions"],
+                    horizontal=True
+                )
+                
+                # Filter results based on display mode
+                filtered_results = st.session_state.matched_results
+                
+                if display_mode == "Questions with Matches Only":
+                    filtered_results = [r for r in st.session_state.matched_results if r["matched_answers"]]
+                elif display_mode == "Top Scoring Questions":
+                    # Sort by best match score and take top 10
+                    scored_results = []
+                    for r in st.session_state.matched_results:
+                        if r["matched_answers"]:
+                            best_score = r["matched_answers"][0]["similarity_score"]
+                            scored_results.append((best_score, r))
+                    scored_results.sort(key=lambda x: x[0], reverse=True)
+                    filtered_results = [r[1] for r in scored_results[:10]]
+                
+                # Display questions and answers
+                for i, result in enumerate(filtered_results, 1):
+                    original_q = result["original_question"]
+                    matches = result["matched_answers"]
+                    
+                    # Create expandable section for each question
+                    with st.expander(f"Question {i}: {original_q['question'][:80]}{'...' if len(original_q['question']) > 80 else ''}", expanded=i <= 3):
+                        
+                        # Display the full original question as header
+                        st.markdown(f"### 🔍 Original Question")
+                        st.markdown(f"**ID:** {original_q['id']}")
+                        st.markdown(f"**Question:** {original_q['question']}")
+                        if original_q.get('source_file'):
+                            st.markdown(f"**Source:** {original_q['source_file']}")
+                        
+                        st.markdown("---")
+                        
+                        # Display answer candidates
+                        if matches:
+                            st.markdown(f"### 💡 Answer Candidates ({len(matches)} matches)")
+                            
+                            for j, match in enumerate(matches, 1):
+                                # Create a colored container for each answer
+                                score = match['similarity_score']
+                                
+                                # Color coding based on similarity score
+                                if score >= 0.7:
+                                    color = "🟢"  # Green for high similarity
+                                elif score >= 0.4:
+                                    color = "🟡"  # Yellow for medium similarity
+                                else:
+                                    color = "🟠"  # Orange for low similarity
+                                
+                                # Display match information
+                                st.markdown(f"#### {color} Match {j} - Score: {score:.3f}")
+                                
+                                # Matched question in a quote box
+                                st.markdown(f"> **Matched Question:** {match['matched_question']}")
+                                
+                                # Answer in a styled container
+                                st.markdown("**Answer:**")
+                                st.markdown(f"<div style='background-color: #f0f2f6; padding: 15px; border-radius: 10px; margin: 10px 0;'>{match['answer']}</div>", 
+                                           unsafe_allow_html=True)
+                                
+                                # Add some spacing between matches
+                                if j < len(matches):
+                                    st.markdown("---")
+                        else:
+                            st.markdown("### ❌ No Answer Candidates Found")
+                            st.info("No matching answers were found for this question in the knowledge base.")
+                        
+                        # Add spacing between questions
+                        st.markdown("<br>", unsafe_allow_html=True)
             
             # Download options
             st.subheader("💾 Download Results")
@@ -421,8 +502,13 @@ def main():
     1. 📤 Upload your document (PDF, Excel, Word, PowerPoint)
     2. 🔍 Questions are automatically extracted using AI
     3. 🎯 Questions are matched to your Q&A knowledge base using TF-IDF similarity
-    4. 📊 View results in an interactive table
+    4. 📊 View results in interactive tables and question-answer format
     5. 💾 Download results as JSON or Excel
+    
+    **Display Options:**
+    - 📋 **Summary Table**: Overview with best matches
+    - 📝 **Detailed Matches**: All matches in tabular format  
+    - 📖 **Question-Answer Format**: Each question as header with answer paragraphs below
     """)
 
 if __name__ == "__main__":

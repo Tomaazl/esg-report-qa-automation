@@ -38,8 +38,9 @@ streamlit run streamlit_qa_app.py
 - Similarity scores for each match
 
 ### 📊 **Interactive Results**
-- **Summary View**: Best matches overview
-- **Detailed View**: All matches with rankings
+- **Summary View**: Best matches overview in table format
+- **Detailed View**: All matches with rankings in tabular format
+- **Question-Answer Format**: Each question as header with answer candidates as paragraphs
 - **Statistics**: Match rates and counts
 - **Sortable/Filterable**: Easy data exploration
 
@@ -59,7 +60,7 @@ streamlit run streamlit_qa_app.py
 
 ### **Main Area**
 - **Left Column**: File upload and processing
-- **Right Column**: Results display and download
+- **Right Column**: Results display with multiple view options and download
 
 ## 📁 **File Requirements**
 
@@ -103,6 +104,13 @@ streamlit run streamlit_qa_app.py
 |-------------|-------------------|------------|------------------|------------------|--------|
 | 1 | Does your company... | 1 | 0.842 | How does Prysmian... | Prysmian places... |
 | 1 | Does your company... | 2 | 0.756 | What initiatives... | The company has... |
+
+### **Question-Answer Format**
+Interactive expandable sections showing:
+- **Question Headers**: Full original questions as section titles
+- **Color-Coded Matches**: 🟢 High (≥0.7), 🟡 Medium (≥0.4), 🟠 Low (<0.4) similarity
+- **Answer Paragraphs**: Full answers in styled containers
+- **Display Modes**: All questions, matches only, or top scoring questions
 
 ## ⚙️ **Configuration**
 

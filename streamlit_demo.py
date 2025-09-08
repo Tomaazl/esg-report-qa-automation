@@ -54,6 +54,7 @@ def show_demo_instructions():
     print("\nStep 4: View Results")
     print("  - Summary table shows best matches")
     print("  - Check 'Show Detailed Matches' for all results")
+    print("  - Check 'Show Question-Answer Format' for readable Q&A display")
     print("  - View statistics: total questions, match rate")
     
     print("\nStep 5: Download Results")
@@ -69,7 +70,8 @@ def show_demo_instructions():
     print("- Questions extracted from your document")
     print("- Each question matched to similar Q&A pairs")
     print("- Similarity scores (0.0 - 1.0, higher is better)")
-    print("- Interactive tables for easy exploration")
+    print("- Interactive tables and readable Q&A format")
+    print("- Color-coded similarity scores (🟢 High, 🟡 Medium, 🟠 Low)")
     
     print("\n🔍 EXAMPLE RESULTS:")
     print("┌─────────────────────────────────────────────────────────┐")
