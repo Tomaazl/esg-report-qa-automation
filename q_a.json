@@ -1,0 +1,18 @@
+[
+	{
+		"question": "What is your return policy?",
+		"answer": "You can return items within 30 days of delivery for a full refund."
+	},
+	{
+		"question": "How do I reset my password?",
+		"answer": "Click the 'Forgot password' link on the sign-in page and follow the instructions."
+	},
+	{
+		"question": "Do you ship internationally?",
+		"answer": "Yes, we ship to over 50 countries. Shipping fees vary by destination."
+	},
+	{
+		"question": "How can I contact support?",
+		"answer": "Email support@example.com or use the in-app chat for 24/7 assistance."
+	}
+]
