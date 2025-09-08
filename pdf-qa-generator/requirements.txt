@@ -1,0 +1,53 @@
+import fitz
+import pytesseract
+from transformers import T5ForConditionalGeneration, T5Tokenizer
+import json
+import re
+import os
+
+# Function to extract text from PDF
+def extract_text_from_pdf(pdf_path):
+    doc = fitz.open(pdf_path)
+    text = ""
+    for page_num in range(len(doc)):
+        page = doc.load_page(page_num)
+        text += page.get_text()
+    return text
+
+# Function to clean and segment text into sentences
+def segment_sentences(text):
+    sentences = re.split(r'(?<=[.!?]) +', text)
+    return [sentence.strip() for sentence in sentences if sentence]
+
+# Function to generate question-answer pairs
+def generate_qa_pairs(sentences):
+    model_name = "valhalla/t5-small-qg-hl"
+    tokenizer = T5Tokenizer.from_pretrained(model_name)
+    model = T5ForConditionalGeneration.from_pretrained(model_name)
+
+    qa_pairs = []
+    for sentence in sentences:
+        input_text = f"generate questions from the following text: {sentence}"
+        input_ids = tokenizer.encode(input_text, return_tensors='pt')
+        outputs = model.generate(input_ids, max_length=50, num_beams=5, early_stopping=True)
+        question = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        qa_pairs.append({'question': question, 'answer': sentence})
+    return qa_pairs
+
+# Function to save QA pairs to JSON
+def save_qa_pairs_to_json(qa_pairs, output_path):
+    with open(output_path, 'w') as json_file:
+        json.dump(qa_pairs, json_file)
+
+# Main function to process PDF and generate QA pairs
+def main(pdf_path, output_path):
+    text = extract_text_from_pdf(pdf_path)
+    sentences = segment_sentences(text)
+    qa_pairs = generate_qa_pairs(sentences)
+    save_qa_pairs_to_json(qa_pairs, output_path)
+
+# Example usage
+if __name__ == "__main__":
+    pdf_path = "path/to/your/document.pdf"  # Update this path
+    output_path = "output/qa_pairs.json"
+    main(pdf_path, output_path)
