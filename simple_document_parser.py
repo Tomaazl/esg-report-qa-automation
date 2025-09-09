@@ -1,18 +1,34 @@
 #!/usr/bin/env python3
 """
-Simple Document Parser
+Simple Document Parser with Azure OpenAI
 A general-purpose parser that can handle Excel, PDF, PowerPoint, Word, and other Docling-supported formats.
-Extracts questions and saves them to JSON format similar to excel_extracted_questions.json.
+Uses Azure OpenAI to intelligently extract ESG-related questions from documents.
 
 Usage:
     python simple_document_parser.py
     # Then modify the DOCUMENT_PATH variable in the script to point to your file
+    # Make sure to set up your Azure OpenAI credentials in pdf-qa-generator/.env
 """
 
 import json
 import os
 from pathlib import Path
-from document_question_parser import DocumentQuestionParser
+from typing import List, Dict, Any
+from dataclasses import dataclass
+from pydantic import BaseModel, Field
+
+# Azure OpenAI imports
+from openai import AzureOpenAI
+from dotenv import load_dotenv
+
+# Document processing imports
+try:
+    from docling.document_converter import DocumentConverter
+    from docling.datamodel.base_models import InputFormat
+    DOCLING_AVAILABLE = True
+except ImportError:
+    print("Warning: Docling not available. Please install with: pip install docling")
+    DOCLING_AVAILABLE = False
 
 # =============================================================================
 # CONFIGURATION - MODIFY THIS SECTION
@@ -27,13 +43,128 @@ GENERATE_DETAILED_FORMAT = True  # Generates format like excel_detailed_question
 
 # =============================================================================
 
+# Load environment variables from pdf-qa-generator/.env
+load_dotenv(os.path.join(os.path.dirname(__file__), 'pdf-qa-generator', '.env'))
+
+@dataclass
+class ExtractedQuestion:
+    """Data class for extracted questions"""
+    id: int
+    question: str
+    source_file: str = ""
+    confidence: float = 1.0
+    category: str = ""
+
+class ESGQuestion(BaseModel):
+    """Pydantic model for ESG questions extracted by Azure OpenAI"""
+    question: str = Field(description="The ESG-related question extracted from the document")
+    category: str = Field(description="ESG category: Environmental, Social, or Governance")
+    confidence: float = Field(description="Confidence score from 0.0 to 1.0", default=1.0)
+
+class ESGQuestionList(BaseModel):
+    """List of ESG questions"""
+    questions: List[ESGQuestion] = Field(description="List of ESG-related questions found in the document")
+
 class SimpleDocumentParser:
-    """Simple wrapper around DocumentQuestionParser for easy document processing"""
+    """Document parser using Azure OpenAI to extract ESG-related questions"""
     
     def __init__(self):
-        """Initialize the parser"""
-        self.parser = DocumentQuestionParser()
+        """Initialize the parser with Azure OpenAI client and document converter"""
+        # Initialize Azure OpenAI client using the same pattern as openai_qa_gen.py
+        self.api_key = os.getenv('AZURE_OPENAI_API_KEY')
+        self.endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
+        self.api_version = os.getenv('AZURE_OPENAI_API_VERSION')
+        
+        if not all([self.api_key, self.endpoint, self.api_version]):
+            raise ValueError(
+                "Missing Azure OpenAI configuration. Please ensure the following environment variables are set in pdf-qa-generator/.env:\n"
+                "- AZURE_OPENAI_API_KEY\n"
+                "- AZURE_OPENAI_ENDPOINT\n"
+                "- AZURE_OPENAI_API_VERSION"
+            )
+        
+        self.client = AzureOpenAI(
+            api_key=self.api_key,
+            azure_endpoint=self.endpoint,
+            api_version=self.api_version
+        )
+        
+        # Initialize document converter if available
+        if DOCLING_AVAILABLE:
+            self.doc_converter = DocumentConverter(
+                allowed_formats=[
+                    InputFormat.PDF,
+                    InputFormat.DOCX,
+                    InputFormat.PPTX,
+                    InputFormat.XLSX
+                ]
+            )
+        else:
+            self.doc_converter = None
     
+    def extract_text_from_document(self, document_path: Path) -> str:
+        """Extract text from document using Docling"""
+        if not DOCLING_AVAILABLE:
+            raise ImportError("Docling is not available. Please install with: pip install docling")
+        
+        try:
+            # Convert document using Docling
+            conv_result = self.doc_converter.convert(str(document_path))
+            # Export to markdown for better text structure
+            doc_text = conv_result.document.export_to_markdown()
+            return doc_text
+        except Exception as e:
+            print(f"❌ Error extracting text from {document_path.name}: {str(e)}")
+            return ""
+
+    def call_openai_structured(self, prompt: str, deployment: str, system_prompt: str = None, temperature: float = 0.3) -> List[ESGQuestion]:
+        """Call Azure OpenAI with structured output - following openai_qa_gen.py pattern"""
+        if system_prompt is None:
+            system_prompt = """You are an ESG (Environmental, Social, Governance) expert. Your task is to identify and extract ESG-related questions from the provided document text.
+
+Focus on questions that relate to:
+- Environmental: Climate change, carbon emissions, renewable energy, waste management, water usage, biodiversity, environmental policies
+- Social: Employee welfare, diversity & inclusion, human rights, labor practices, community impact, health & safety, supply chain ethics
+- Governance: Board composition, executive compensation, business ethics, anti-corruption, transparency, risk management, regulatory compliance
+
+Extract only clear, well-formed questions that end with a question mark. Categorize each question as Environmental, Social, or Governance. Provide a confidence score based on how clearly ESG-related the question is."""
+
+        try:
+            response = self.client.beta.chat.completions.parse(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                model=deployment,
+                response_format=ESGQuestionList,
+                temperature=temperature,
+                max_tokens=16384
+            )
+            
+            if response.choices[0].message.parsed:
+                return response.choices[0].message.parsed.questions
+            else:
+                print("⚠️  No structured response received from Azure OpenAI")
+                return []
+                
+        except Exception as e:
+            print(f"❌ Error calling Azure OpenAI: {str(e)}")
+            return []
+
+    def extract_esg_questions_with_ai(self, text: str, deployment: str = "gpt-4") -> List[ESGQuestion]:
+        """Use Azure OpenAI to extract ESG-related questions from text"""
+        user_prompt = f"""Please analyze the following document text and extract all ESG-related questions. For each question, provide:
+1. The exact question text
+2. ESG category (Environmental, Social, or Governance)
+3. Confidence score (0.0-1.0)
+
+Document text:
+{text}
+
+Please extract only legitimate questions that are clearly related to ESG topics."""
+
+        return self.call_openai_structured(user_prompt, deployment)
+
     def parse_document_to_json(self, document_path: str):
         """
         Parse a document and save to JSON files with the same base name
@@ -60,14 +191,40 @@ class SimpleDocumentParser:
             print(f"✅ Supported formats: {', '.join(supported_extensions)}")
         
         try:
-            # Extract questions using the document parser
-            questions = self.parser.parse_document(str(document_path))
+            # Extract text from document
+            print("🔄 Extracting text from document...")
+            document_text = self.extract_text_from_document(document_path)
             
-            if not questions:
-                print("⚠️  No questions found in the document.")
+            if not document_text.strip():
+                print("⚠️  No text content found in the document.")
                 return False
             
-            print(f"✅ Successfully extracted {len(questions)} questions")
+            print(f"✅ Extracted {len(document_text)} characters of text")
+            
+            # Use Azure OpenAI to extract ESG questions
+            print("🤖 Using Azure OpenAI to identify ESG questions...")
+            
+            # Use the known deployment name
+            deployment_name = "esg-qa"
+            print(f"   Using deployment: {deployment_name}")
+            esg_questions = self.extract_esg_questions_with_ai(document_text, deployment_name)
+            
+            if not esg_questions:
+                print("⚠️  No ESG-related questions found in the document.")
+                return False
+            
+            print(f"✅ Successfully extracted {len(esg_questions)} ESG questions")
+            
+            # Convert to ExtractedQuestion format
+            questions = []
+            for i, esg_q in enumerate(esg_questions, 1):
+                questions.append(ExtractedQuestion(
+                    id=i,
+                    question=esg_q.question,
+                    source_file=str(document_path),
+                    confidence=esg_q.confidence,
+                    category=esg_q.category
+                ))
             
             # Generate output filenames based on input filename
             base_name = document_path.stem
@@ -113,14 +270,16 @@ class SimpleDocumentParser:
                     "id": q.id,
                     "question": q.question,
                     "source_file": os.path.basename(source_file),
-                    "confidence": q.confidence
+                    "confidence": q.confidence,
+                    "esg_category": q.category
                 }
                 for q in questions
             ],
             "metadata": {
                 "total_questions": len(questions),
-                "extraction_method": "docling + regex patterns",
-                "source_file": os.path.basename(source_file)
+                "extraction_method": "docling + azure openai",
+                "source_file": os.path.basename(source_file),
+                "esg_categories": list(set(q.category for q in questions if q.category))
             }
         }
         
@@ -156,15 +315,28 @@ class SimpleDocumentParser:
 
 def main():
     """Main function - modify DOCUMENT_PATH at the top of the file"""
-    parser = SimpleDocumentParser()
+    print("🚀 Simple Document Parser with Azure OpenAI")
+    print("=" * 60)
+    print("🤖 Uses AI to intelligently extract ESG-related questions")
+    print("=" * 60)
     
-    print("🚀 Simple Document Parser")
-    print("=" * 50)
+    try:
+        parser = SimpleDocumentParser()
+    except ValueError as e:
+        print(f"❌ Configuration Error: {e}")
+        print("\n📝 Setup Instructions:")
+        print("1. Make sure you have a '.env' file in the 'pdf-qa-generator' directory")
+        print("2. Ensure your Azure OpenAI credentials are set:")
+        print("   AZURE_OPENAI_API_KEY=your_api_key_here")
+        print("   AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/")
+        print("   AZURE_OPENAI_API_VERSION=2024-02-15-preview")
+        print("3. The script will automatically try common deployment names")
+        print("4. Run the script again")
+        return
     
-    # Check if the document path is set
-    if DOCUMENT_PATH == "esg_social_ethical_questionnaire.xlsx":
-        print("⚠️  Please modify the DOCUMENT_PATH variable at the top of this script")
-        print("   to point to your document file.")
+    # Check if the document path is set to default
+    if DOCUMENT_PATH == "pdf_esg_social_ethical_questionnaire.pdf":
+        print("ℹ️  Using default document path. You can modify DOCUMENT_PATH at the top of this script.")
         print(f"   Current path: {DOCUMENT_PATH}")
         
         # Check if the default file exists
@@ -182,6 +354,7 @@ def main():
     if success:
         print(f"\n🎉 Document processing completed successfully!")
         print(f"📂 Check the current directory for the generated JSON files.")
+        print(f"✨ ESG questions were intelligently extracted using Azure OpenAI")
     else:
         print(f"\n❌ Document processing failed.")
 
