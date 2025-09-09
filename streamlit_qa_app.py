@@ -125,21 +125,27 @@ def match_questions_to_answers(questions_data, qa_pairs_file, top_k=3):
                 st.error("❌ No Q&A pairs available for matching")
                 return None
             
-            # Build TF-IDF encoder and match
-            qa_questions = [item.question for item in qa_items]
-            token_to_idf, doc_vectors = matcher.build_encoder(qa_questions)
+            # Setup embedding-based retrieval system
+            if not matcher.setup_retrieval_system(qa_items):
+                st.error("❌ Failed to setup retrieval system")
+                return None
             progress_bar.progress(80)
             
-            # Process each question
+            # Process each question using embeddings
             all_matches = []
             for question in questions:
-                matches = matcher.find_best_answers(
-                    question.question, 
-                    token_to_idf, 
-                    doc_vectors, 
-                    qa_items, 
-                    top_k
-                )
+                # Find best matching answers using vector embeddings
+                match_results = matcher.find_best_answers_with_embeddings(question.question, top_k)
+                
+                # Convert MatchResult objects to dict format for compatibility
+                matches = []
+                for match in match_results:
+                    matches.append({
+                        "matched_question": match.matched_question,
+                        "answer": match.answer,
+                        "similarity_score": match.similarity_score,
+                        "retrieval_method": match.retrieval_method
+                    })
                 
                 question_result = {
                     "original_question": {
@@ -153,11 +159,14 @@ def match_questions_to_answers(questions_data, qa_pairs_file, top_k=3):
             
             progress_bar.progress(100)
             
-            # Clean up temp file
+            # Clean up temp files and vector store
             try:
                 os.unlink(questions_temp_path)
             except:
-                pass
+                pass  # Ignore cleanup errors
+            
+            # Clean up vector store
+            matcher.cleanup()
             
             st.success(f"✅ Successfully matched {len(questions)} questions to answers")
             return all_matches
