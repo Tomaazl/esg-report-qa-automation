@@ -1,1 +1,208 @@
-{"qa_pairs": [{"question": "What are Prysmian's climate-related targets and achievements regarding greenhouse gas (GHG) emissions?", "answer": "Prysmian has set clear and measurable climate targets in line with the Paris Agreement, aiming to reduce GHG emissions across its value chain. By 2024, Prysmian achieved a 37% reduction in scope 1 and 2 GHG emissions and a 54% reduction in scope 3 emissions compared to the 2019 baseline. The company aims to reduce scope 1 and 2 emissions by 60% and scope 3 emissions by 65% by 2030, with the ultimate goal of achieving a 90% reduction in both by 2035, thereby reaching net zero emissions across the entire value chain."}, {"question": "How does Prysmian integrate biodiversity considerations into its operations?", "answer": "Prysmian takes a holistic approach to biodiversity, integrating risk assessments into its enterprise risk management system and using tools like the WWF Biodiversity Risk Filter to analyze potential impacts. In 2024, 18% of Prysmian sites were identified as potentially exposed to biodiversity-related factors. The company adopts best practices to avoid, reduce, restore, and compensate for biodiversity impacts, including the use of bioactive concrete and natural or artificial stone to promote marine habitats. Prysmian aims for a net gain in biodiversity by 2035 and will report progress in line with the Taskforce on Nature-related Financial Disclosures (TNFD) guidelines starting in 2025."}, {"question": "What initiatives does Prysmian have in place to promote a circular economy?", "answer": "Prysmian embraces circular economy principles by prioritizing the use of recycled materials, designing products for sustainability, and managing waste responsibly. In 2024, 43.1% of revenues came from sustainable solutions, and 16.2% recycled content was used in polyethylene jackets and copper. The company has internal programs such as Design for Sustainability (D4S) and Sustainability for Business (S4B), and it reuses 53% of cable reels. Prysmian aims to achieve over 55% of revenues from sustainable solutions by 2028 and increase recycled content in products."}, {"question": "How does Prysmian address diversity, equity, and inclusion (DE&I) within its workforce?", "answer": "Prysmian places people at the center of its strategy and promotes an inclusive, safe, and growth-oriented work environment. In 2024, 47.5% of desk workers hired were women, and 19.2% of executives were women. The company runs global and local DE&I campaigns, offers training on inclusive leadership and unconscious bias, and has established employee resource groups. Prysmian also supports employee wellness, human rights due diligence, and continuous training and development. The company aims to have over 50% of employees as shareholders and increase the proportion of women in new hires and leadership roles by 2028."}, {"question": "What are Prysmian's practices for ensuring sustainability in its supply chain?", "answer": "Prysmian conducts structured due diligence on its supply chain, including desk and risk analysis of suppliers to identify ESG risks. Suppliers with unsatisfactory scores undergo sustainability audits and are required to implement improvement plans. Since 2017, 44 suppliers have been audited, and in 2024, 500 suppliers were screened. Prysmian participates in initiatives such as the Copper Mark and the Aluminum Stewardship Initiative to promote best practices and worker welfare. The company also engages suppliers through conferences, workshops, and training to foster sustainable practices."}, {"question": "How does Prysmian contribute to local communities?", "answer": "Prysmian is committed to supporting the socioeconomic development of local communities by improving access to renewable energy and digital connectivity. Since 2022, Prysmian has enabled 78.4 million households to access green electricity and 17.1 million households to access fast digital connectivity. The company hires local professionals, partners with universities for training programs, supports women in STEM, and donates to communities affected by natural disasters. Prysmian aims to expand access to green energy and connectivity to 110 million and 15 million households, respectively, from 2022 to 2025."}]}
+{
+    "qa_pairs": [
+      {
+        "question": "What are Prysmian's climate-related targets and achievements regarding greenhouse gas (GHG) emissions?",
+        "answer": "Prysmian has set clear and measurable climate targets in line with the Paris Agreement, aiming to reduce GHG emissions across its value chain. By 2024, Prysmian achieved a 37% reduction in scope 1 and 2 GHG emissions and a 54% reduction in scope 3 emissions compared to the 2019 baseline. The company aims to reduce scope 1 and 2 emissions by 60% and scope 3 emissions by 65% by 2030, with the ultimate goal of achieving a 90% reduction in both by 2035, thereby reaching net zero emissions across the entire value chain."
+      },
+      {
+        "question": "How does Prysmian integrate biodiversity considerations into its operations?",
+        "answer": "Prysmian takes a holistic approach to biodiversity, integrating risk assessments into its enterprise risk management system and using tools like the WWF Biodiversity Risk Filter to analyze potential impacts. In 2024, 18% of Prysmian sites were identified as potentially exposed to biodiversity-related factors. The company adopts best practices to avoid, reduce, restore, and compensate for biodiversity impacts, including the use of bioactive concrete and natural or artificial stone to promote marine habitats. Prysmian aims for a net gain in biodiversity by 2035 and will report progress in line with the Taskforce on Nature-related Financial Disclosures (TNFD) guidelines starting in 2025."
+      },
+      {
+        "question": "What initiatives does Prysmian have in place to promote a circular economy?",
+        "answer": "Prysmian embraces circular economy principles by prioritizing the use of recycled materials, designing products for sustainability, and managing waste responsibly. In 2024, 43.1% of revenues came from sustainable solutions, and 16.2% recycled content was used in polyethylene jackets and copper. The company has internal programs such as Design for Sustainability (D4S) and Sustainability for Business (S4B), and it reuses 53% of cable reels. Prysmian aims to achieve over 55% of revenues from sustainable solutions by 2028 and increase recycled content in products."
+      },
+      {
+        "question": "How does Prysmian address diversity, equity, and inclusion (DE&I) within its workforce?",
+        "answer": "Prysmian places people at the center of its strategy and promotes an inclusive, safe, and growth-oriented work environment. In 2024, 47.5% of desk workers hired were women, and 19.2% of executives were women. The company runs global and local DE&I campaigns, offers training on inclusive leadership and unconscious bias, and has established employee resource groups. Prysmian also supports employee wellness, human rights due diligence, and continuous training and development. The company aims to have over 50% of employees as shareholders and increase the proportion of women in new hires and leadership roles by 2028."
+      },
+      {
+        "question": "What are Prysmian's practices for ensuring sustainability in its supply chain?",
+        "answer": "Prysmian conducts structured due diligence on its supply chain, including desk and risk analysis of suppliers to identify ESG risks. Suppliers with unsatisfactory scores undergo sustainability audits and are required to implement improvement plans. Since 2017, 44 suppliers have been audited, and in 2024, 500 suppliers were screened. Prysmian participates in initiatives such as the Copper Mark and the Aluminum Stewardship Initiative to promote best practices and worker welfare. The company also engages suppliers through conferences, workshops, and training to foster sustainable practices."
+      },
+      {
+        "question": "How does Prysmian contribute to local communities?",
+        "answer": "Prysmian is committed to supporting the socioeconomic development of local communities by improving access to renewable energy and digital connectivity. Since 2022, Prysmian has enabled 78.4 million households to access green electricity and 17.1 million households to access fast digital connectivity. The company hires local professionals, partners with universities for training programs, supports women in STEM, and donates to communities affected by natural disasters. Prysmian aims to expand access to green energy and connectivity to 110 million and 15 million households, respectively, from 2022 to 2025."
+      },
+      {
+        "question": "What is Prysmian's strategic goal for revenue from sustainable solutions by 2028?",
+        "answer": "Prysmian aims to achieve 55% of its revenues from sustainable solutions by 2028."
+      },
+      {
+        "question": "What is Prysmian's new biodiversity goal?",
+        "answer": "Prysmian has set a new goal to achieve a Net Gain approach in biodiversity across all of its priority areas of operation by 2035."
+      },
+      {
+        "question": "On what scientific basis has Prysmian set its climate goals?",
+        "answer": "Prysmian's climate goals are based on science and are in line with the Paris Agreement's 1.5°C trajectory, with validation from the Science-Based Targets initiative (SBTi)."
+      },
+      {
+        "question": "What percentage reduction in energy consumption was achieved at Prysmian sites in 2024?",
+        "answer": "In 2024, Prysmian achieved a 3% reduction in energy consumption at its production sites compared to the previous year."
+      },
+      {
+        "question": "How many new photovoltaic plants did Prysmian activate in 2024?",
+        "answer": "Prysmian activated 3 new photovoltaic plants in 2024, in addition to the 5 developed in 2023."
+      },
+      {
+        "question": "What is the capacity of the off-site Power Purchase Agreements (PPAs) Prysmian signed in 2024?",
+        "answer": "The off-site PPAs signed in 2024 will deliver 46.3 GWh of renewable electricity per year for Europe and 63.9 GWh per year for Latin America."
+      },
+      {
+        "question": "What actions has Prysmian taken to reduce SF6 gas emissions?",
+        "answer": "Prysmian has reduced SF6 emissions by introducing new dry technology for high-voltage tests and using alternative gases with 99 times less environmental impact. This has resulted in less than 6% of sites still being affected by SF6 gas use."
+      },
+      {
+        "question": "What is Prysmian's specific 2030 target for reducing Scope 1 and 2 GHG emissions?",
+        "answer": "Prysmian's target is to reduce Scope 1 and 2 GHG emissions by 60% by 2030, compared to the 2019 baseline."
+      },
+      {
+        "question": "What is Prysmian's specific 2030 target for reducing Scope 3 GHG emissions?",
+        "answer": "Prysmian's target is to reduce Scope 3 GHG emissions by 65% by 2030, compared to the 2019 baseline."
+      },
+      {
+        "question": "What is Prysmian's ultimate emissions reduction target for its 2035 Net Zero goal?",
+        "answer": "The ultimate target is a 90% reduction in Scope 1, 2, and 3 emissions by 2035."
+      },
+      {
+        "question": "What tool did Prysmian use for its preliminary biodiversity risk analysis?",
+        "answer": "Prysmian used the WWF Biodiversity Risk Filter to conduct a preliminary analysis of biodiversity-related risks in its facilities and installation activities."
+      },
+      {
+        "question": "What was the result of Prysmian's biodiversity risk analysis using the WWF tool?",
+        "answer": "The analysis showed that 18% of Prysmian's sites could potentially be in biodiversity-sensitive areas."
+      },
+      {
+        "question": "What is Prysmian's four-step approach to managing biodiversity impacts during cable installation?",
+        "answer": "Prysmian follows a holistic approach to manage biodiversity impacts: avoid, reduce, restore, and compensate."
+      },
+      {
+        "question": "What new practices has Prysmian adopted to protect marine ecosystems?",
+        "answer": "Prysmian has begun using natural or artificial stone to promote the growth of epibenthic species and bioactive concrete to strengthen erosion protection, allowing infrastructure to become marine habitats."
+      },
+      {
+        "question": "Which reporting framework will Prysmian adopt for its biodiversity progress?",
+        "answer": "Prysmian will adopt the Taskforce on Nature-related Financial Disclosures (TNFD) guidelines starting from 2025 to report on its biodiversity progress."
+      },
+      {
+        "question": "What percentage of revenue came from sustainable solutions in 2024?",
+        "answer": "In 2024, 43.1% of Prysmian's revenues were generated from sustainable solutions."
+      },
+      {
+        "question": "What was the recycled content percentage for PE jackets and copper in 2024?",
+        "answer": "In 2024, the recycled content on PE jackets and copper was 16.2%."
+      },
+      {
+        "question": "What is the goal of Prysmian's 'Design for Sustainability (D4S)' program?",
+        "answer": "The D4S program aims to integrate sustainability principles into the research and development process for every new product, guided by E-Path criteria."
+      },
+      {
+        "question": "What is the purpose of Prysmian's 'Sustainability for Business (S4B)' program?",
+        "answer": "The S4B program's mission is to facilitate the marketing of Prysmian's sustainable products."
+      },
+      {
+        "question": "Which tools does Prysmian use to analyze the environmental performance of its products?",
+        "answer": "Prysmian uses tools such as the Environmental Product Declaration (EPD) and the Carbon Footprint (CFP) to analyze the entire product life cycle."
+      },
+      {
+        "question": "What percentage of its cable reels did Prysmian reuse in 2024?",
+        "answer": "In 2024, Prysmian reused 53% of its cable reels."
+      },
+      {
+        "question": "What is Prysmian's target for recycled content in PE jackets and copper by 2025?",
+        "answer": "The target for 2025 is to have between 14.5% and 15.7% recycled content on PE jackets and copper."
+      },
+      {
+        "question": "What percentage of Prysmian employees were shareholders in 2024?",
+        "answer": "In 2024, 46% of Prysmian employees were also shareholders in the company."
+      },
+      {
+        "question": "What was the percentage of women among desk workers hired in 2024?",
+        "answer": "In 2024, 47.5% of desk workers hired by Prysmian were women."
+      },
+      {
+        "question": "What percentage of Prysmian's executives were women in 2024?",
+        "answer": "In 2024, 19.2% of Prysmian's executives were women."
+      },
+      {
+        "question": "What DE&I training does Prysmian offer its employees?",
+        "answer": "Prysmian offers courses on inclusive leadership and unconscious bias, with mandatory training in some regions."
+      },
+      {
+        "question": "What initiative was launched to measure and improve employee well-being?",
+        "answer": "Prysmian launched the Well-being Index, a tool based on positive psychology, to measure and improve individual and team well-being."
+      },
+      {
+        "question": "What was the scope of Prysmian's human rights due diligence in 2024?",
+        "answer": "In 2024, Prysmian completed its human rights due diligence assessment, covering 100% of its production sites."
+      },
+      {
+        "question": "How is Prysmian's employee training organized?",
+        "answer": "Training is structured through a global School of Management, Professional School, and Digital School, which are supplemented by Local Schools to meet specific regional educational needs."
+      },
+      {
+        "question": "What is Prysmian's goal for employee share ownership by 2028?",
+        "answer": "The goal is to have more than 50% of the global workforce as shareholders by 2028."
+      },
+      {
+        "question": "What is Prysmian's 2025 target for hiring women as desk workers?",
+        "answer": "The target for 2025 is to have between 46% and 48% of women among new desk worker hires."
+      },
+      {
+        "question": "What is Prysmian's 2025 target for the representation of women in executive roles?",
+        "answer": "The target for 2025 is to have between 20% and 23% women executives."
+      },
+      {
+        "question": "How many suppliers were screened through Desk & Risk analysis in 2024?",
+        "answer": "In 2024, 500 suppliers were examined through Prysmian's Desk & Risk analysis."
+      },
+      {
+        "question": "What international framework is Prysmian's supplier audit checklist based on?",
+        "answer": "The supplier audit checklist is based on the Responsible Business Alliance (RBA), the world's largest industry coalition for responsible business conduct."
+      },
+      {
+        "question": "Which major responsible sourcing initiative did Prysmian join in 2024?",
+        "answer": "In 2024, Prysmian joined the Copper Mark Initiative to promote best practices across the copper value chain."
+      },
+      {
+        "question": "How does Prysmian engage with its key suppliers on sustainability?",
+        "answer": "Prysmian engages key suppliers through initiatives like the Supplier Conference, workshops, and collaborations to develop more sustainable products."
+      },
+      {
+        "question": "What is Prysmian's target for total sustainability audits in its supply chain by the end of 2025?",
+        "answer": "The target is to have carried out a total of 50 sustainability audits in the supply chain from 2017 to 2025."
+      },
+      {
+        "question": "How many suppliers does Prysmian plan to screen through Desk & Risk analysis in 2025?",
+        "answer": "Prysmian plans to examine 500 suppliers through Desk & Risk analysis in 2025."
+      },
+      {
+        "question": "How many households has Prysmian enabled to access green electricity since 2022?",
+        "answer": "Since 2022, Prysmian has enabled 78.4 million households to access green electricity."
+      },
+      {
+        "question": "How many households has Prysmian enabled to access fast digital connectivity since 2022?",
+        "answer": "Since 2022, Prysmian has enabled 17.1 million households to access fast digital connectivity."
+      },
+      {
+        "question": "How does Prysmian's project strategy support local economies?",
+        "answer": "Prysmian supports local economies by hiring local professionals and consultants for its projects."
+      },
+      {
+        "question": "What program does Prysmian have to support women in technical fields?",
+        "answer": "Prysmian has a 'Women in STEM' program that supports young women interested in careers in science, technology, engineering, and mathematics."
+      },
+      {
+        "question": "What was the value of Prysmian's donations to local communities in 2024?",
+        "answer": "In 2024, Prysmian donated about Euro 1.3 million to communities, contributing with money, products, and employee work hours."
+      },
+      {
+        "question": "What is Prysmian's target for providing households with access to green electricity by 2025?",
+        "answer": "The target is to provide 110 million households with access to green electricity between 2022 and 2025."
+      },
+      {
+        "question": "What was Prysmian's 2025 target for providing fast digital access, and what is its current status?",
+        "answer": "The target was to provide 15 million households with fast digital access from 2022 to 2025. This target was exceeded early and is currently under review."
+      }
+    ]
+  }

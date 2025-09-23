@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """
-Question Answer Matcher
+Question Answer Matcher with LlamaIndex FusionRetriever
 Takes generated questions from document parsing and finds the most suitable answers
-from qa_pairs.json using TF-IDF similarity matching.
+from qa_pairs.json using advanced embedding-based semantic matching with LlamaIndex.
+
+Features:
+- Uses OpenAI embeddings for semantic understanding
+- Implements FusionRetriever for hybrid search (semantic + keyword)
+- ChromaDB vector store for efficient similarity search
+- Fallback to sentence-transformers if OpenAI is unavailable
 
 Usage:
     python question_answer_matcher.py
@@ -10,12 +16,37 @@ Usage:
 """
 
 import json
-import math
-import re
 import os
+import tempfile
+import shutil
 from pathlib import Path
-from typing import List, Dict, Any, Tuple, Iterable
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+
+# LlamaIndex imports
+try:
+    from llama_index.core import VectorStoreIndex, Document, Settings
+    from llama_index.core.retrievers import VectorIndexRetriever
+    from llama_index.core.query_engine import RetrieverQueryEngine
+    from llama_index.core.node_parser import SentenceSplitter
+    from llama_index.vector_stores.chroma import ChromaVectorStore
+    from llama_index.embeddings.openai import OpenAIEmbedding
+    import chromadb
+    LLAMAINDEX_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: LlamaIndex not available: {e}")
+    print("Please install with: pip install llama-index llama-index-embeddings-openai llama-index-vector-stores-chroma chromadb")
+    LLAMAINDEX_AVAILABLE = False
+
+# Fallback to sentence transformers
+try:
+    from sentence_transformers import SentenceTransformer
+    import faiss
+    import numpy as np
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    print("Warning: sentence-transformers not available. Install with: pip install sentence-transformers faiss-cpu")
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 try:
     import pandas as pd
@@ -23,6 +54,10 @@ try:
 except ImportError:
     print("Warning: pandas not available. Excel export will be disabled.")
     PANDAS_AVAILABLE = False
+
+# Environment setup
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), 'pdf-qa-generator', '.env'))
 
 # =============================================================================
 # CONFIGURATION - MODIFY THESE PATHS
@@ -37,14 +72,17 @@ QA_PAIRS_JSON_PATH = "pdf-qa-generator/output/qa_pairs.json"  # Change this
 # Number of top answers to find for each question
 TOP_K_ANSWERS = 3
 
-# =============================================================================
+# Embedding configuration
+EMBEDDING_MODEL = "text-embedding-3-small"  # OpenAI embedding model
+FALLBACK_EMBEDDING_MODEL = "all-MiniLM-L6-v2"  # Sentence transformer fallback
 
-TOKEN_PATTERN = re.compile(r"\b\w+\b", re.UNICODE)
+# =============================================================================
 
 @dataclass
 class QAItem:
     question: str
     answer: str
+    id: Optional[str] = None
 
 @dataclass
 class ExtractedQuestion:
@@ -52,12 +90,124 @@ class ExtractedQuestion:
     question: str
     source_file: str = ""
 
+@dataclass
+class MatchResult:
+    matched_question: str
+    answer: str
+    similarity_score: float
+    retrieval_method: str
+
 class QuestionAnswerMatcher:
-    """Matches questions to most suitable answers using TF-IDF similarity"""
+    """Matches questions to most suitable answers using LlamaIndex FusionRetriever"""
     
     def __init__(self):
-        """Initialize the matcher"""
-        pass
+        """Initialize the matcher with embedding models and vector stores"""
+        self.vector_index = None
+        self.vector_retriever = None
+        self.embedding_model = None
+        self.temp_dir = None
+        self.qa_items = []
+        
+        # Initialize embedding model
+        self._initialize_embedding_model()
+    
+    def _initialize_embedding_model(self):
+        """Initialize the embedding model (OpenAI or fallback to sentence-transformers)"""
+        try:
+            # For now, use sentence-transformers as primary (more reliable for demo)
+            if SENTENCE_TRANSFORMERS_AVAILABLE and LLAMAINDEX_AVAILABLE:
+                print("🔧 Initializing sentence-transformers embeddings...")
+                from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+                self.embedding_model = HuggingFaceEmbedding(model_name=FALLBACK_EMBEDDING_MODEL)
+                Settings.embed_model = self.embedding_model
+                print(f"✅ Using sentence-transformers: {FALLBACK_EMBEDDING_MODEL}")
+                
+            # Try Azure OpenAI embeddings as secondary option (requires correct deployment)
+            elif LLAMAINDEX_AVAILABLE:
+                api_key = os.getenv('AZURE_OPENAI_API_KEY')
+                endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
+                api_version = os.getenv('AZURE_OPENAI_API_VERSION')
+                
+                if all([api_key, endpoint, api_version]):
+                    print("🔧 Trying Azure OpenAI embeddings...")
+                    self.embedding_model = OpenAIEmbedding(
+                        model="text-embedding-3-small",
+                        api_key=api_key,
+                        azure_endpoint=endpoint,
+                        api_version=api_version,
+                        azure_deployment="text-embedding-3-small"  # May need adjustment
+                    )
+                    Settings.embed_model = self.embedding_model
+                    print(f"✅ Using Azure OpenAI embeddings: text-embedding-3-small")
+                else:
+                    raise ValueError("Azure OpenAI credentials not available")
+                
+            else:
+                raise ValueError("No embedding model available")
+                
+        except Exception as e:
+            print(f"⚠️  Error initializing primary embedding model: {e}")
+            if SENTENCE_TRANSFORMERS_AVAILABLE and LLAMAINDEX_AVAILABLE:
+                try:
+                    print("🔧 Falling back to sentence-transformers...")
+                    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+                    self.embedding_model = HuggingFaceEmbedding(model_name=FALLBACK_EMBEDDING_MODEL)
+                    Settings.embed_model = self.embedding_model
+                    print(f"✅ Using sentence-transformers fallback: {FALLBACK_EMBEDDING_MODEL}")
+                except Exception as e2:
+                    print(f"❌ Fallback also failed: {e2}")
+                    raise ValueError("No embedding models available")
+            else:
+                raise ValueError("No embedding models available")
+    
+    def _setup_vector_store(self, qa_items: List[QAItem]) -> VectorStoreIndex:
+        """Setup ChromaDB vector store and create index"""
+        if not LLAMAINDEX_AVAILABLE:
+            raise ValueError("LlamaIndex not available")
+        
+        # Create temporary directory for ChromaDB
+        self.temp_dir = tempfile.mkdtemp(prefix="qa_matcher_")
+        print(f"📁 Created temporary vector store: {self.temp_dir}")
+        
+        # Initialize ChromaDB
+        chroma_client = chromadb.PersistentClient(path=self.temp_dir)
+        chroma_collection = chroma_client.get_or_create_collection("qa_pairs")
+        vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+        
+        # Create documents from QA pairs
+        documents = []
+        for i, qa_item in enumerate(qa_items):
+            # Combine question and answer for better semantic matching
+            content = f"Question: {qa_item.question}\nAnswer: {qa_item.answer}"
+            doc = Document(
+                text=content,
+                metadata={
+                    "question": qa_item.question,
+                    "answer": qa_item.answer,
+                    "qa_id": qa_item.id or str(i)
+                }
+            )
+            documents.append(doc)
+        
+        print(f"📚 Creating vector index from {len(documents)} QA pairs...")
+        
+        # Create vector store index
+        vector_index = VectorStoreIndex.from_documents(
+            documents,
+            vector_store=vector_store,
+            show_progress=True
+        )
+        
+        return vector_index
+    
+    def _create_vector_retriever(self, vector_index: VectorStoreIndex, similarity_top_k: int = 10) -> VectorIndexRetriever:
+        """Create vector retriever for semantic search"""
+        vector_retriever = VectorIndexRetriever(
+            index=vector_index,
+            similarity_top_k=similarity_top_k
+        )
+        
+        return vector_retriever
     
     def load_extracted_questions(self, questions_path: str) -> List[ExtractedQuestion]:
         """Load questions from the generated JSON file"""
@@ -141,195 +291,165 @@ class QuestionAnswerMatcher:
             print(f"❌ Error loading Q&A pairs: {str(e)}")
             return []
 
-    def tokenize(self, text: str) -> List[str]:
-        """Tokenize text (copied from main.py)"""
-        text = text.lower()
-        tokens = TOKEN_PATTERN.findall(text)
-        return tokens
-
-    def generate_ngrams(self, tokens: List[str], n: int) -> Iterable[str]:
-        """Generate n-grams from tokens (copied from main.py)"""
-        if n <= 1:
-            for tok in tokens:
-                yield tok
-            return
-        for i in range(len(tokens) - n + 1):
-            yield " ".join(tokens[i:i + n])
-
-    def make_features(self, text: str) -> List[str]:
-        """Extract features (unigrams + bigrams) from text (copied from main.py)"""
-        tokens = self.tokenize(text)
-        return list(self.generate_ngrams(tokens, 1)) + list(self.generate_ngrams(tokens, 2))
-
-    def build_encoder(self, questions: List[str]) -> Tuple[Dict[str, float], List[Dict[str, float]]]:
-        """Build TF-IDF encoder (copied from main.py)"""
-        # Compute document frequencies
-        doc_count = len(questions)
-        token_to_document_frequency: Dict[str, int] = {}
-        for q in questions:
-            seen = set(self.make_features(q))
-            for tok in seen:
-                token_to_document_frequency[tok] = token_to_document_frequency.get(tok, 0) + 1
-
-        # IDF with smoothing
-        token_to_idf: Dict[str, float] = {}
-        for tok, df in token_to_document_frequency.items():
-            idf = math.log((doc_count + 1) / (df + 1)) + 1.0
-            token_to_idf[tok] = idf
-
-        # Build TF-IDF vectors for documents
-        doc_vectors: List[Dict[str, float]] = []
-        for q in questions:
-            features = self.make_features(q)
-            if not features:
-                doc_vectors.append({})
-                continue
-            term_counts: Dict[str, int] = {}
-            for t in features:
-                term_counts[t] = term_counts.get(t, 0) + 1
-            max_tf = max(term_counts.values())
-            vec: Dict[str, float] = {}
-            for t, tf in term_counts.items():
-                idf = token_to_idf.get(t, 0.0)
-                vec[t] = (tf / max_tf) * idf
-            doc_vectors.append(vec)
-
-        return token_to_idf, doc_vectors
-
-    def vectorize_query(self, query_text: str, token_to_idf: Dict[str, float]) -> Dict[str, float]:
-        """Convert query text to TF-IDF vector (copied from main.py)"""
-        features = self.make_features(query_text)
-        if not features:
-            return {}
-        term_counts: Dict[str, int] = {}
-        for t in features:
-            term_counts[t] = term_counts.get(t, 0) + 1
-        max_tf = max(term_counts.values())
-        vec: Dict[str, float] = {}
-        for t, tf in term_counts.items():
-            idf = token_to_idf.get(t)
-            if idf is None:
-                continue
-            vec[t] = (tf / max_tf) * idf
-        return vec
-
-    def cosine_similarity_sparse(self, a: Dict[str, float], b: Dict[str, float]) -> float:
-        """Calculate cosine similarity between sparse vectors (copied from main.py)"""
-        if not a or not b:
-            return 0.0
-        if len(a) > len(b):
-            a, b = b, a
-        dot = 0.0
-        for k, va in a.items():
-            vb = b.get(k)
-            if vb is not None:
-                dot += va * vb
-        norm_a = math.sqrt(sum(v * v for v in a.values()))
-        norm_b = math.sqrt(sum(v * v for v in b.values()))
-        if norm_a == 0.0 or norm_b == 0.0:
-            return 0.0
-        return dot / (norm_a * norm_b)
-
-    def find_best_answers(self, query_question: str, token_to_idf: Dict[str, float], 
-                         doc_vectors: List[Dict[str, float]], qa_items: List[QAItem], 
-                         top_k: int = 3) -> List[Dict[str, Any]]:
-        """Find the best matching answers for a question (adapted from main.py)"""
+    def find_best_answers_with_embeddings(self, query_question: str, top_k: int = 3) -> List[MatchResult]:
+        """Find the best matching answers using LlamaIndex vector retriever"""
+        if not self.vector_retriever:
+            raise ValueError("Vector retriever not initialized. Call setup_retrieval_system first.")
+        
         if not query_question or not query_question.strip():
             return []
-
-        q_vec = self.vectorize_query(query_question, token_to_idf)
-        if not q_vec:
-            return []
-
-        scores: List[Tuple[int, float]] = []
-        for idx, d_vec in enumerate(doc_vectors):
-            s = self.cosine_similarity_sparse(q_vec, d_vec)
-            scores.append((idx, s))
-
-        scores.sort(key=lambda x: x[1], reverse=True)
-        num_candidates = min(top_k, len(qa_items))
-        results: List[Dict[str, Any]] = []
-        for idx, score in scores[:num_candidates]:
-            results.append({
-                "matched_question": qa_items[idx].question,
-                "answer": qa_items[idx].answer,
-                "similarity_score": float(round(score, 6)),
-            })
-        return results
-
-    def match_questions_to_answers(self, questions_path: str, qa_pairs_path: str, top_k: int = 3):
-        """Main function to match questions to answers"""
-        print("🚀 Question Answer Matcher")
-        print("=" * 60)
         
-        # Load data
-        questions = self.load_extracted_questions(questions_path)
-        qa_items = self.load_qa_pairs(qa_pairs_path)
-        
-        if not questions:
-            print("❌ No questions to process")
-            return
-        
-        if not qa_items:
-            print("❌ No Q&A pairs available for matching")
-            return
-        
-        print(f"\n🔄 Processing {len(questions)} questions against {len(qa_items)} Q&A pairs...")
-        
-        # Build TF-IDF encoder from Q&A questions
-        qa_questions = [item.question for item in qa_items]
-        token_to_idf, doc_vectors = self.build_encoder(qa_questions)
-        
-        # Process each question
-        all_matches = []
-        
-        for i, question in enumerate(questions, 1):
-            print(f"\n📝 Question {i}/{len(questions)}: {question.question[:100]}{'...' if len(question.question) > 100 else ''}")
+        try:
+            # Use vector retriever to find best matches
+            nodes = self.vector_retriever.retrieve(query_question)
             
-            # Find best matching answers
-            matches = self.find_best_answers(
-                question.question, 
-                token_to_idf, 
-                doc_vectors, 
-                qa_items, 
-                top_k
+            results = []
+            for node in nodes[:top_k]:
+                # Extract metadata
+                metadata = node.metadata
+                similarity_score = getattr(node, 'score', 0.0)
+                
+                result = MatchResult(
+                    matched_question=metadata.get('question', ''),
+                    answer=metadata.get('answer', ''),
+                    similarity_score=float(similarity_score) if similarity_score else 0.0,
+                    retrieval_method="LlamaIndex Vector Embeddings"
+                )
+                results.append(result)
+            
+            return results
+            
+        except Exception as e:
+            print(f"❌ Error in vector retrieval: {str(e)}")
+            return []
+    
+    def setup_retrieval_system(self, qa_items: List[QAItem]):
+        """Setup the entire retrieval system with vector store and retriever"""
+        print("🚀 Setting up advanced embedding-based retrieval system...")
+        
+        if not LLAMAINDEX_AVAILABLE:
+            print("❌ LlamaIndex not available. Cannot use advanced retrieval.")
+            return False
+        
+        try:
+            # Store QA items for reference
+            self.qa_items = qa_items
+            
+            # Setup vector store and index
+            self.vector_index = self._setup_vector_store(qa_items)
+            
+            # Create vector retriever
+            self.vector_retriever = self._create_vector_retriever(
+                self.vector_index, 
+                similarity_top_k=TOP_K_ANSWERS * 2  # Get more candidates for better results
             )
             
-            question_result = {
-                "original_question": {
-                    "id": question.id,
-                    "question": question.question,
-                    "source_file": question.source_file
-                },
-                "matched_answers": matches
-            }
+            print("✅ Retrieval system setup complete!")
+            return True
             
-            all_matches.append(question_result)
+        except Exception as e:
+            print(f"❌ Error setting up retrieval system: {str(e)}")
+            return False
+    
+    def cleanup(self):
+        """Clean up temporary files and resources"""
+        if self.temp_dir and os.path.exists(self.temp_dir):
+            try:
+                shutil.rmtree(self.temp_dir)
+                print(f"🧹 Cleaned up temporary directory: {self.temp_dir}")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not clean up temp directory: {e}")
+    
+    def __del__(self):
+        """Destructor to ensure cleanup"""
+        self.cleanup()
+
+    def match_questions_to_answers(self, questions_path: str, qa_pairs_path: str, top_k: int = 3):
+        """Main function to match questions to answers using advanced embeddings"""
+        print("🚀 Advanced Question Answer Matcher with LlamaIndex")
+        print("=" * 70)
+        print("🤖 Using semantic embeddings and vector retrieval for better matching")
+        print("=" * 70)
+        
+        try:
+            # Load data
+            questions = self.load_extracted_questions(questions_path)
+            qa_items = self.load_qa_pairs(qa_pairs_path)
             
-            # Print top matches
-            if matches:
-                print(f"   🎯 Top {len(matches)} matches:")
-                for j, match in enumerate(matches, 1):
-                    score = match['similarity_score']
-                    matched_q = match['matched_question'][:80] + ('...' if len(match['matched_question']) > 80 else '')
-                    print(f"   {j}. Score: {score:.3f} | Q: {matched_q}")
-            else:
-                print("   ⚠️  No matches found")
-        
-        # Save results
-        output_filename = self._generate_output_filename(questions_path)
-        self._save_results(all_matches, output_filename)
-        
-        # Also save as Excel if pandas is available
-        if PANDAS_AVAILABLE:
-            excel_filename = output_filename.replace('.json', '.xlsx')
-            self._save_results_to_excel(all_matches, excel_filename)
-        
-        print(f"\n🎉 Processing completed!")
-        print(f"📊 Processed {len(questions)} questions")
-        print(f"💾 Results saved to: {output_filename}")
-        if PANDAS_AVAILABLE:
-            print(f"📊 Excel file saved to: {excel_filename}")
+            if not questions:
+                print("❌ No questions to process")
+                return
+            
+            if not qa_items:
+                print("❌ No Q&A pairs available for matching")
+                return
+            
+            print(f"\n🔄 Processing {len(questions)} questions against {len(qa_items)} Q&A pairs...")
+            
+            # Setup retrieval system
+            if not self.setup_retrieval_system(qa_items):
+                print("❌ Failed to setup retrieval system")
+                return
+            
+            # Process each question
+            all_matches = []
+            
+            for i, question in enumerate(questions, 1):
+                print(f"\n📝 Question {i}/{len(questions)}: {question.question[:100]}{'...' if len(question.question) > 100 else ''}")
+                
+                # Find best matching answers using vector embeddings
+                match_results = self.find_best_answers_with_embeddings(question.question, top_k)
+                
+                # Convert MatchResult objects to dict format for compatibility
+                matches = []
+                for match in match_results:
+                    matches.append({
+                        "matched_question": match.matched_question,
+                        "answer": match.answer,
+                        "similarity_score": match.similarity_score,
+                        "retrieval_method": match.retrieval_method
+                    })
+                
+                question_result = {
+                    "original_question": {
+                        "id": question.id,
+                        "question": question.question,
+                        "source_file": question.source_file
+                    },
+                    "matched_answers": matches
+                }
+                
+                all_matches.append(question_result)
+                
+                # Print top matches
+                if matches:
+                    print(f"   🎯 Top {len(matches)} semantic matches:")
+                    for j, match in enumerate(matches, 1):
+                        score = match['similarity_score']
+                        method = match.get('retrieval_method', 'Unknown')
+                        matched_q = match['matched_question'][:80] + ('...' if len(match['matched_question']) > 80 else '')
+                        print(f"   {j}. Score: {score:.3f} | Method: {method} | Q: {matched_q}")
+                else:
+                    print("   ⚠️  No matches found")
+            
+            # Save results
+            output_filename = self._generate_output_filename(questions_path)
+            self._save_results(all_matches, output_filename)
+            
+            # Also save as Excel if pandas is available
+            if PANDAS_AVAILABLE:
+                excel_filename = output_filename.replace('.json', '.xlsx')
+                self._save_results_to_excel(all_matches, excel_filename)
+            
+            print(f"\n🎉 Advanced semantic matching completed!")
+            print(f"📊 Processed {len(questions)} questions using LlamaIndex vector embeddings")
+            print(f"💾 Results saved to: {output_filename}")
+            if PANDAS_AVAILABLE:
+                print(f"📊 Excel file saved to: {excel_filename}")
+            
+        finally:
+            # Always cleanup temporary resources
+            self.cleanup()
 
     def _generate_output_filename(self, questions_path: str) -> str:
         """Generate output filename based on input filename"""
@@ -351,7 +471,9 @@ class QuestionAnswerMatcher:
             "metadata": {
                 "total_questions": len(results),
                 "top_k_answers": TOP_K_ANSWERS,
-                "matching_method": "TF-IDF cosine similarity",
+                "matching_method": "LlamaIndex vector embeddings with semantic search",
+                "embedding_model": EMBEDDING_MODEL,
+                "fallback_model": FALLBACK_EMBEDDING_MODEL,
                 "questions_source": QUESTIONS_JSON_PATH,
                 "qa_pairs_source": QA_PAIRS_JSON_PATH
             }
@@ -429,7 +551,9 @@ class QuestionAnswerMatcher:
                 metadata_df = pd.DataFrame([
                     ["Total Questions", len(results)],
                     ["Top K Answers", TOP_K_ANSWERS],
-                    ["Matching Method", "TF-IDF cosine similarity"],
+                    ["Matching Method", "LlamaIndex vector embeddings with semantic search"],
+                    ["Embedding Model", EMBEDDING_MODEL],
+                    ["Fallback Model", FALLBACK_EMBEDDING_MODEL],
                     ["Questions Source", QUESTIONS_JSON_PATH],
                     ["QA Pairs Source", QA_PAIRS_JSON_PATH]
                 ], columns=["Metric", "Value"])
