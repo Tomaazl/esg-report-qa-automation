@@ -33,6 +33,12 @@ def init_session_state():
         st.session_state.matched_results = None
     if 'uploaded_file_name' not in st.session_state:
         st.session_state.uploaded_file_name = None
+    if 'selected_qa_indices' not in st.session_state:
+        st.session_state.selected_qa_indices = None  # Will be set to all indices by default
+    if 'qa_pairs_data' not in st.session_state:
+        st.session_state.qa_pairs_data = None
+    if 'qa_pairs_file_path' not in st.session_state:
+        st.session_state.qa_pairs_file_path = None
 
 def save_uploaded_file(uploaded_file):
     """Save uploaded file to temporary location"""
@@ -94,8 +100,15 @@ def process_document(file_path, file_name):
         st.error(f"Error processing document: {str(e)}")
         return None
 
-def match_questions_to_answers(questions_data, qa_pairs_file, top_k=3):
-    """Match extracted questions to Q&A pairs"""
+def match_questions_to_answers(questions_data, qa_pairs_file, top_k=3, selected_indices=None):
+    """Match extracted questions to Q&A pairs
+    
+    Args:
+        questions_data: The extracted questions data
+        qa_pairs_file: Path to the Q&A pairs file
+        top_k: Number of top matches to return
+        selected_indices: List of indices of selected Q&A pairs to use (None = use all)
+    """
     try:
         with st.spinner("Matching questions to answers..."):
             # Create temporary files for processing
@@ -115,6 +128,12 @@ def match_questions_to_answers(questions_data, qa_pairs_file, top_k=3):
             # Load data
             questions = matcher.load_extracted_questions(questions_temp_path)
             qa_items = matcher.load_qa_pairs(qa_pairs_file)
+            
+            # Filter Q&A items based on selected indices
+            if selected_indices is not None and len(selected_indices) > 0:
+                qa_items = [qa_items[i] for i in selected_indices if i < len(qa_items)]
+                st.info(f"Using {len(qa_items)} selected Q&A pairs for matching")
+            
             progress_bar.progress(60)
             
             if not questions:
@@ -245,63 +264,192 @@ def download_results(matched_results, file_format="json"):
         output.seek(0)
         return output.getvalue()
 
-def main():
-    """Main Streamlit application"""
-    init_session_state()
+def load_qa_pairs_for_selection(qa_pairs_file):
+    """Load Q&A pairs for the selection interface"""
+    try:
+        with open(qa_pairs_file, 'r', encoding='utf-8') as f:
+            qa_data = json.load(f)
+        qa_pairs = qa_data.get("qa_pairs", qa_data)
+        if isinstance(qa_pairs, list):
+            return qa_pairs
+        return []
+    except Exception as e:
+        st.error(f"Error loading Q&A pairs: {str(e)}")
+        return []
+
+def render_qa_selection_page():
+    """Render the Q&A pair selection page"""
+    st.header("📚 Knowledge Base Selection")
+    st.markdown("Select which question-answer pairs from the knowledge base should be used for matching.")
     
-    # Header
-    st.title("📋 ESG Question-Answer Document Processor")
-    st.markdown("Upload documents to extract questions and match them with relevant answers from your knowledge base.")
-    
-    # Sidebar
-    with st.sidebar:
-        st.header("⚙️ Configuration")
-        
-        # Q&A pairs file selection
-        st.subheader("📚 Knowledge Base")
+    # Q&A pairs file selection
+    col1, col2 = st.columns([3, 1])
+    with col1:
         qa_pairs_file = st.text_input(
             "Q&A Pairs File Path", 
-            value="pdf-qa-generator/output/qa_pairs.json",
+            value=st.session_state.qa_pairs_file_path or "pdf-qa-generator/output/qa_pairs.json",
             help="Path to your Q&A pairs JSON file"
         )
-        
-        # Check if Q&A pairs file exists
-        if os.path.exists(qa_pairs_file):
-            st.success("✅ Q&A pairs file found")
-            try:
-                with open(qa_pairs_file, 'r', encoding='utf-8') as f:
-                    qa_data = json.load(f)
-                qa_pairs = qa_data.get("qa_pairs", qa_data)
-                if isinstance(qa_pairs, list):
-                    qa_count = len(qa_pairs)
-                elif isinstance(qa_pairs, dict):
-                    qa_count = len(qa_pairs)
-                else:
-                    qa_count = 0
-                st.info(f"📊 {qa_count} Q&A pairs available")
-            except Exception as e:
-                st.error(f"❌ Error reading Q&A file: {str(e)}")
-        else:
-            st.error("❌ Q&A pairs file not found")
-        
-        # Matching settings
-        st.subheader("🎯 Matching Settings")
-        top_k = st.slider("Number of top matches per question", 1, 10, 3)
-        
-        # Supported formats info
-        st.subheader("📄 Supported Formats")
-        st.markdown("""
-        - **PDF** (.pdf)
-        - **Excel** (.xlsx, .xls)
-        - **Word** (.docx, .doc)
-        - **PowerPoint** (.pptx, .ppt)
-        """)
     
-    # Main content area
+    with col2:
+        st.write("")  # Spacer
+        st.write("")  # Spacer
+        load_button = st.button("Load Q&A Pairs", type="primary")
+    
+    # Load Q&A pairs when button is clicked or path changes
+    if load_button or (qa_pairs_file != st.session_state.qa_pairs_file_path):
+        if os.path.exists(qa_pairs_file):
+            qa_pairs = load_qa_pairs_for_selection(qa_pairs_file)
+            if qa_pairs:
+                st.session_state.qa_pairs_data = qa_pairs
+                st.session_state.qa_pairs_file_path = qa_pairs_file
+                # Initialize all as selected by default
+                if st.session_state.selected_qa_indices is None:
+                    st.session_state.selected_qa_indices = list(range(len(qa_pairs)))
+                st.success(f"✅ Loaded {len(qa_pairs)} Q&A pairs")
+            else:
+                st.error("❌ No Q&A pairs found in the file")
+        else:
+            st.error("❌ File not found")
+    
+    # Display Q&A pairs for selection
+    if st.session_state.qa_pairs_data:
+        st.markdown("---")
+        
+        # Selection controls
+        col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
+        with col1:
+            if st.button("Select All"):
+                st.session_state.selected_qa_indices = list(range(len(st.session_state.qa_pairs_data)))
+                st.rerun()
+        with col2:
+            if st.button("Deselect All"):
+                st.session_state.selected_qa_indices = []
+                st.rerun()
+        with col3:
+            if st.button("Invert Selection"):
+                current = set(st.session_state.selected_qa_indices or [])
+                all_indices = set(range(len(st.session_state.qa_pairs_data)))
+                st.session_state.selected_qa_indices = list(all_indices - current)
+                st.rerun()
+        with col4:
+            selected_count = len(st.session_state.selected_qa_indices or [])
+            total_count = len(st.session_state.qa_pairs_data)
+            st.metric("Selected Q&A Pairs", f"{selected_count} / {total_count}")
+        
+        st.markdown("---")
+        
+        # Search/filter functionality
+        search_term = st.text_input("🔍 Search Q&A pairs", placeholder="Enter keywords to filter questions or answers...")
+        
+        # Display Q&A pairs in a table with checkboxes
+        st.subheader("Q&A Pairs")
+        
+        # Create a container for the scrollable area
+        with st.container():
+            # Create columns for the header
+            header_cols = st.columns([0.5, 3, 4, 1])
+            with header_cols[0]:
+                st.markdown("**Select**")
+            with header_cols[1]:
+                st.markdown("**Question**")
+            with header_cols[2]:
+                st.markdown("**Answer**")
+            with header_cols[3]:
+                st.markdown("**Index**")
+            
+            st.markdown("---")
+            
+            # Filter Q&A pairs based on search term
+            filtered_indices = []
+            for i, qa_pair in enumerate(st.session_state.qa_pairs_data):
+                if search_term:
+                    search_lower = search_term.lower()
+                    if (search_lower not in qa_pair.get('question', '').lower() and 
+                        search_lower not in qa_pair.get('answer', '').lower()):
+                        continue
+                filtered_indices.append(i)
+            
+            # Display filtered Q&A pairs
+            if filtered_indices:
+                # Use a form to batch checkbox updates
+                with st.form("qa_selection_form"):
+                    new_selected = []
+                    
+                    for idx in filtered_indices:
+                        qa_pair = st.session_state.qa_pairs_data[idx]
+                        cols = st.columns([0.5, 3, 4, 1])
+                        
+                        with cols[0]:
+                            is_selected = st.checkbox(
+                                "",
+                                value=idx in (st.session_state.selected_qa_indices or []),
+                                key=f"qa_select_{idx}"
+                            )
+                            if is_selected:
+                                new_selected.append(idx)
+                        
+                        with cols[1]:
+                            # Display truncated question
+                            question = qa_pair.get('question', '')
+                            display_question = question[:150] + "..." if len(question) > 150 else question
+                            st.markdown(f"<small>{display_question}</small>", unsafe_allow_html=True)
+                        
+                        with cols[2]:
+                            # Display truncated answer
+                            answer = qa_pair.get('answer', '')
+                            display_answer = answer[:200] + "..." if len(answer) > 200 else answer
+                            st.markdown(f"<small>{display_answer}</small>", unsafe_allow_html=True)
+                        
+                        with cols[3]:
+                            st.markdown(f"<small>{idx}</small>", unsafe_allow_html=True)
+                        
+                        st.markdown("---")
+                    
+                    # Submit button
+                    col1, col2 = st.columns([1, 4])
+                    with col1:
+                        if st.form_submit_button("Update Selection", type="primary"):
+                            # Update selected indices
+                            # Keep non-filtered selections and add new filtered selections
+                            non_filtered = [i for i in (st.session_state.selected_qa_indices or []) 
+                                           if i not in filtered_indices]
+                            st.session_state.selected_qa_indices = non_filtered + new_selected
+                            st.success(f"✅ Selection updated: {len(st.session_state.selected_qa_indices)} Q&A pairs selected")
+            else:
+                st.info("No Q&A pairs match your search criteria.")
+        
+        # Display selected Q&A pairs summary
+        if st.session_state.selected_qa_indices:
+            with st.expander(f"View Selected Q&A Pairs ({len(st.session_state.selected_qa_indices)})" ):
+                for idx in st.session_state.selected_qa_indices[:10]:  # Show first 10
+                    if idx < len(st.session_state.qa_pairs_data):
+                        qa_pair = st.session_state.qa_pairs_data[idx]
+                        st.markdown(f"**Q{idx + 1}:** {qa_pair.get('question', '')[:100]}...")
+                if len(st.session_state.selected_qa_indices) > 10:
+                    st.markdown(f"*... and {len(st.session_state.selected_qa_indices) - 10} more*")
+    else:
+        st.info("👆 Please load a Q&A pairs file to begin selection")
+
+def render_qa_matching_page():
+    """Render the main Q&A matching page"""
+    # Header
+    st.header("📋 Question-Answer Matching")
+    st.markdown("Upload documents to extract questions and match them with selected answers from your knowledge base.")
+    
+    # Check if Q&A pairs are loaded and selected
+    if st.session_state.qa_pairs_file_path and st.session_state.selected_qa_indices:
+        qa_info = st.info(f"Using {len(st.session_state.selected_qa_indices)} selected Q&A pairs from {st.session_state.qa_pairs_file_path}")
+    elif st.session_state.qa_pairs_file_path:
+        st.warning("⚠️ No Q&A pairs selected. Please go to the Knowledge Base tab to select Q&A pairs.")
+    else:
+        st.warning("⚠️ No knowledge base loaded. Please go to the Knowledge Base tab to load and select Q&A pairs.")
+    
+    # Main content area (rest of the original main function content)
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        st.header("📤 Upload Document")
+        st.subheader("📤 Upload Document")
         
         uploaded_file = st.file_uploader(
             "Choose a document file",
@@ -322,8 +470,10 @@ def main():
             
             # Process button
             if st.button("🚀 Process Document", type="primary"):
-                if not os.path.exists(qa_pairs_file):
-                    st.error("❌ Please ensure Q&A pairs file exists before processing")
+                if not st.session_state.qa_pairs_file_path:
+                    st.error("❌ Please load a knowledge base first in the Knowledge Base tab")
+                elif not st.session_state.selected_qa_indices:
+                    st.error("❌ Please select at least one Q&A pair in the Knowledge Base tab")
                 else:
                     # Save uploaded file temporarily
                     temp_file_path = save_uploaded_file(uploaded_file)
@@ -336,15 +486,20 @@ def main():
                             st.session_state.processed_questions = questions_data
                             st.session_state.uploaded_file_name = uploaded_file.name
                             
-                            # Match questions to answers
-                            matched_results = match_questions_to_answers(questions_data, qa_pairs_file, top_k)
+                            # Match questions to answers using selected Q&A pairs
+                            matched_results = match_questions_to_answers(
+                                questions_data, 
+                                st.session_state.qa_pairs_file_path, 
+                                top_k=3,
+                                selected_indices=st.session_state.selected_qa_indices
+                            )
                             
                             if matched_results:
                                 st.session_state.matched_results = matched_results
                                 st.rerun()
     
     with col2:
-        st.header("📊 Results")
+        st.subheader("📊 Results")
         
         if st.session_state.matched_results:
             st.success(f"✅ Processed: {st.session_state.uploaded_file_name}")
@@ -353,10 +508,10 @@ def main():
             summary_df, detailed_df = create_results_dataframe(st.session_state.matched_results)
             
             # Display summary
-            st.subheader("📋 Summary - Best Matches")
+            st.markdown("### 📋 Summary - Best Matches")
             st.dataframe(
                 summary_df,
-                width='stretch',
+                use_container_width=True,
                 height=400
             )
             
@@ -377,96 +532,15 @@ def main():
             
             # Detailed view toggle
             if st.checkbox("📝 Show Detailed Matches"):
-                st.subheader("🔍 All Matches Detail")
+                st.markdown("### 🔍 All Matches Detail")
                 st.dataframe(
                     detailed_df,
-                    width='stretch',
+                    use_container_width=True,
                     height=600
                 )
             
-            # Question-Answer Display Section
-            if st.checkbox("📖 Show Question-Answer Format"):
-                st.subheader("📖 Questions with Answer Candidates")
-                st.markdown("*Each question is shown as a header with answer candidates listed below.*")
-                
-                # Create expandable sections for better organization
-                display_mode = st.radio(
-                    "Display Mode:",
-                    ["All Questions", "Questions with Matches Only", "Top Scoring Questions"],
-                    horizontal=True
-                )
-                
-                # Filter results based on display mode
-                filtered_results = st.session_state.matched_results
-                
-                if display_mode == "Questions with Matches Only":
-                    filtered_results = [r for r in st.session_state.matched_results if r["matched_answers"]]
-                elif display_mode == "Top Scoring Questions":
-                    # Sort by best match score and take top 10
-                    scored_results = []
-                    for r in st.session_state.matched_results:
-                        if r["matched_answers"]:
-                            best_score = r["matched_answers"][0]["similarity_score"]
-                            scored_results.append((best_score, r))
-                    scored_results.sort(key=lambda x: x[0], reverse=True)
-                    filtered_results = [r[1] for r in scored_results[:10]]
-                
-                # Display questions and answers
-                for i, result in enumerate(filtered_results, 1):
-                    original_q = result["original_question"]
-                    matches = result["matched_answers"]
-                    
-                    # Create expandable section for each question
-                    with st.expander(f"Question {i}: {original_q['question'][:80]}{'...' if len(original_q['question']) > 80 else ''}", expanded=i <= 3):
-                        
-                        # Display the full original question as header
-                        st.markdown(f"### 🔍 Original Question")
-                        st.markdown(f"**ID:** {original_q['id']}")
-                        st.markdown(f"**Question:** {original_q['question']}")
-                        if original_q.get('source_file'):
-                            st.markdown(f"**Source:** {original_q['source_file']}")
-                        
-                        st.markdown("---")
-                        
-                        # Display answer candidates
-                        if matches:
-                            st.markdown(f"### 💡 Answer Candidates ({len(matches)} matches)")
-                            
-                            for j, match in enumerate(matches, 1):
-                                # Create a colored container for each answer
-                                score = match['similarity_score']
-                                
-                                # Color coding based on similarity score
-                                if score >= 0.7:
-                                    color = "🟢"  # Green for high similarity
-                                elif score >= 0.4:
-                                    color = "🟡"  # Yellow for medium similarity
-                                else:
-                                    color = "🟠"  # Orange for low similarity
-                                
-                                # Display match information
-                                st.markdown(f"#### {color} Match {j} - Score: {score:.3f}")
-                                
-                                # Matched question in a quote box
-                                st.markdown(f"> **Matched Question:** {match['matched_question']}")
-                                
-                                # Answer in a styled container
-                                st.markdown("**Answer:**")
-                                st.markdown(f"<div style='background-color: #f0f2f6; padding: 15px; border-radius: 10px; margin: 10px 0;'>{match['answer']}</div>", 
-                                           unsafe_allow_html=True)
-                                
-                                # Add some spacing between matches
-                                if j < len(matches):
-                                    st.markdown("---")
-                        else:
-                            st.markdown("### ❌ No Answer Candidates Found")
-                            st.info("No matching answers were found for this question in the knowledge base.")
-                        
-                        # Add spacing between questions
-                        st.markdown("<br>", unsafe_allow_html=True)
-            
             # Download options
-            st.subheader("💾 Download Results")
+            st.markdown("### 💾 Download Results")
             col_dl1, col_dl2 = st.columns(2)
             
             with col_dl1:
@@ -494,22 +568,40 @@ def main():
         
         else:
             st.info("👆 Upload and process a document to see results here")
+
+def main():
+    """Main Streamlit application"""
+    init_session_state()
+    
+    # Header
+    st.title("📋 ESG Question-Answer Document Processor")
+    
+    # Create tabs
+    tab1, tab2 = st.tabs(["📚 Knowledge Base", "📋 Q&A Matching"])
+    
+    with tab1:
+        render_qa_selection_page()
+    
+    with tab2:
+        render_qa_matching_page()
     
     # Footer
     st.markdown("---")
     st.markdown("""
     **How it works:**
-    1. 📤 Upload your document (PDF, Excel, Word, PowerPoint)
-    2. 🔍 Questions are automatically extracted using AI
-    3. 🎯 Questions are matched to your Q&A knowledge base using TF-IDF similarity
-    4. 📊 View results in interactive tables and question-answer format
-    5. 💾 Download results as JSON or Excel
+    1. 📚 Go to the Knowledge Base tab to load and select Q&A pairs
+    2. 📤 Upload your document (PDF, Excel, Word, PowerPoint) in the Q&A Matching tab
+    3. 🔍 Questions are automatically extracted using AI
+    4. 🎯 Questions are matched to your selected Q&A pairs using TF-IDF similarity
+    5. 📊 View results in interactive tables
+    6. 💾 Download results as JSON or Excel
     
-    **Display Options:**
-    - 📋 **Summary Table**: Overview with best matches
-    - 📝 **Detailed Matches**: All matches in tabular format  
-    - 📖 **Question-Answer Format**: Each question as header with answer paragraphs below
+    **Features:**
+    - ✅ Select specific Q&A pairs from your knowledge base
+    - 🔍 Search and filter Q&A pairs
+    - 📋 View summary and detailed matching results
+    - 📊 Export results in multiple formats
     """)
 
 if __name__ == "__main__":
-    main()
+    main() 
