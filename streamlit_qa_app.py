@@ -15,7 +15,7 @@ import zipfile
 
 # Import our custom modules
 from simple_document_parser import SimpleDocumentParser
-from question_answer_matcher import QuestionAnswerMatcher
+from question_answer_matcher import QuestionAnswerMatcher, QAItem
 
 # Configure page
 st.set_page_config(
@@ -33,6 +33,27 @@ def init_session_state():
         st.session_state.matched_results = None
     if 'uploaded_file_name' not in st.session_state:
         st.session_state.uploaded_file_name = None
+    # Knowledge base state
+    if 'qa_pairs_file' not in st.session_state:
+        st.session_state.qa_pairs_file = "pdf-qa-generator/output/qa_pairs.json"
+    if 'qa_pairs_df' not in st.session_state:
+        st.session_state.qa_pairs_df = None
+    if 'qa_selected_count' not in st.session_state:
+        st.session_state.qa_selected_count = 0
+    if 'qa_total_count' not in st.session_state:
+        st.session_state.qa_total_count = 0
+
+def _update_qa_counts():
+    """Update selected and total counts in session state."""
+    if st.session_state.qa_pairs_df is None or st.session_state.qa_pairs_df.empty:
+        st.session_state.qa_total_count = 0
+        st.session_state.qa_selected_count = 0
+        return
+    st.session_state.qa_total_count = int(len(st.session_state.qa_pairs_df))
+    try:
+        st.session_state.qa_selected_count = int(st.session_state.qa_pairs_df["Selected"].sum())
+    except Exception:
+        st.session_state.qa_selected_count = 0
 
 def save_uploaded_file(uploaded_file):
     """Save uploaded file to temporary location"""
@@ -94,7 +115,42 @@ def process_document(file_path, file_name):
         st.error(f"Error processing document: {str(e)}")
         return None
 
-def match_questions_to_answers(questions_data, qa_pairs_file, top_k=3):
+def _load_qa_pairs_to_df(qa_pairs_file: str) -> pd.DataFrame:
+    """Load Q&A pairs JSON into a DataFrame with selection column."""
+    try:
+        with open(qa_pairs_file, 'r', encoding='utf-8') as f:
+            qa_data = json.load(f)
+        raw = qa_data.get("qa_pairs", qa_data)
+
+        rows = []
+        if isinstance(raw, dict):
+            for q, a in raw.items():
+                if isinstance(q, str) and isinstance(a, str):
+                    rows.append({"Selected": True, "Question": q.strip(), "Answer": a.strip()})
+        elif isinstance(raw, list):
+            for entry in raw:
+                if isinstance(entry, dict):
+                    q = entry.get("question")
+                    a = entry.get("answer")
+                    if isinstance(q, str) and isinstance(a, str):
+                        rows.append({"Selected": True, "Question": q.strip(), "Answer": a.strip()})
+        df = pd.DataFrame(rows, columns=["Selected", "Question", "Answer"]).fillna("")
+        return df
+    except Exception as e:
+        st.error(f"❌ Error reading Q&A file: {str(e)}")
+        return pd.DataFrame(columns=["Selected", "Question", "Answer"])  # empty
+
+
+def _get_selected_qa_items_from_state() -> list:
+    """Return selected QAItem list from session state DataFrame."""
+    if st.session_state.qa_pairs_df is None or st.session_state.qa_pairs_df.empty:
+        return []
+    selected_df = st.session_state.qa_pairs_df[st.session_state.qa_pairs_df["Selected"]]
+    items = [QAItem(question=row["Question"], answer=row["Answer"]) for _, row in selected_df.iterrows()]
+    return items
+
+
+def match_questions_to_answers(questions_data, qa_pairs_file, top_k=3, selected_qa_items=None):
     """Match extracted questions to Q&A pairs"""
     try:
         with st.spinner("Matching questions to answers..."):
@@ -114,7 +170,10 @@ def match_questions_to_answers(questions_data, qa_pairs_file, top_k=3):
             
             # Load data
             questions = matcher.load_extracted_questions(questions_temp_path)
-            qa_items = matcher.load_qa_pairs(qa_pairs_file)
+            if selected_qa_items is not None:
+                qa_items = selected_qa_items
+            else:
+                qa_items = matcher.load_qa_pairs(qa_pairs_file)
             progress_bar.progress(60)
             
             if not questions:
@@ -259,28 +318,31 @@ def main():
         
         # Q&A pairs file selection
         st.subheader("📚 Knowledge Base")
-        qa_pairs_file = st.text_input(
+        qa_pairs_input = st.text_input(
             "Q&A Pairs File Path", 
-            value="pdf-qa-generator/output/qa_pairs.json",
+            value=st.session_state.qa_pairs_file,
             help="Path to your Q&A pairs JSON file"
         )
-        
-        # Check if Q&A pairs file exists
-        if os.path.exists(qa_pairs_file):
+
+        # If the path changed, load DataFrame and update counts
+        if qa_pairs_input != st.session_state.qa_pairs_file:
+            st.session_state.qa_pairs_file = qa_pairs_input
+            if os.path.exists(st.session_state.qa_pairs_file):
+                st.session_state.qa_pairs_df = _load_qa_pairs_to_df(st.session_state.qa_pairs_file)
+                _update_qa_counts()
+            else:
+                st.session_state.qa_pairs_df = None
+                _update_qa_counts()
+
+        # Initial lazy load if needed
+        if st.session_state.qa_pairs_df is None and os.path.exists(st.session_state.qa_pairs_file):
+            st.session_state.qa_pairs_df = _load_qa_pairs_to_df(st.session_state.qa_pairs_file)
+            _update_qa_counts()
+
+        # Show file status and counts
+        if os.path.exists(st.session_state.qa_pairs_file):
             st.success("✅ Q&A pairs file found")
-            try:
-                with open(qa_pairs_file, 'r', encoding='utf-8') as f:
-                    qa_data = json.load(f)
-                qa_pairs = qa_data.get("qa_pairs", qa_data)
-                if isinstance(qa_pairs, list):
-                    qa_count = len(qa_pairs)
-                elif isinstance(qa_pairs, dict):
-                    qa_count = len(qa_pairs)
-                else:
-                    qa_count = 0
-                st.info(f"📊 {qa_count} Q&A pairs available")
-            except Exception as e:
-                st.error(f"❌ Error reading Q&A file: {str(e)}")
+            st.info(f"📊 {st.session_state.qa_selected_count}/{st.session_state.qa_total_count} selected")
         else:
             st.error("❌ Q&A pairs file not found")
         
@@ -297,8 +359,12 @@ def main():
         - **PowerPoint** (.pptx, .ppt)
         """)
     
-    # Main content area
-    col1, col2 = st.columns([1, 1])
+    # Tabs for main content
+    tab_process, tab_kb = st.tabs(["🧩 Process", "📚 Knowledge Base"])
+    
+    # Process tab content
+    with tab_process:
+        col1, col2 = st.columns([1, 1])
     
     with col1:
         st.header("📤 Upload Document")
@@ -322,9 +388,17 @@ def main():
             
             # Process button
             if st.button("🚀 Process Document", type="primary"):
-                if not os.path.exists(qa_pairs_file):
+                if not os.path.exists(st.session_state.qa_pairs_file):
                     st.error("❌ Please ensure Q&A pairs file exists before processing")
                 else:
+                    # Ensure QA pairs are loaded and we have selection
+                    if st.session_state.qa_pairs_df is None:
+                        st.session_state.qa_pairs_df = _load_qa_pairs_to_df(st.session_state.qa_pairs_file)
+                        _update_qa_counts()
+                    selected_qa_items = _get_selected_qa_items_from_state()
+                    if not selected_qa_items:
+                        st.error("❌ No Q&A pairs selected. Please select at least one in the Knowledge Base tab.")
+                        st.stop()
                     # Save uploaded file temporarily
                     temp_file_path = save_uploaded_file(uploaded_file)
                     
@@ -336,8 +410,13 @@ def main():
                             st.session_state.processed_questions = questions_data
                             st.session_state.uploaded_file_name = uploaded_file.name
                             
-                            # Match questions to answers
-                            matched_results = match_questions_to_answers(questions_data, qa_pairs_file, top_k)
+                            # Match questions to answers (using only selected QA pairs)
+                            matched_results = match_questions_to_answers(
+                                questions_data,
+                                st.session_state.qa_pairs_file,
+                                top_k,
+                                selected_qa_items=selected_qa_items
+                            )
                             
                             if matched_results:
                                 st.session_state.matched_results = matched_results
@@ -494,6 +573,67 @@ def main():
         
         else:
             st.info("👆 Upload and process a document to see results here")
+
+    # Knowledge Base tab content
+    with tab_kb:
+        st.header("📚 Knowledge Base - Select Q&A Pairs")
+        st.caption("Only selected Q&A pairs will be used in matching. By default, all are selected.")
+
+        # File status
+        file_col1, file_col2 = st.columns([3, 1])
+        with file_col1:
+            st.text_input("Current Q&A File", value=st.session_state.qa_pairs_file, disabled=True)
+        with file_col2:
+            if st.button("Reload", use_container_width=True):
+                if os.path.exists(st.session_state.qa_pairs_file):
+                    st.session_state.qa_pairs_df = _load_qa_pairs_to_df(st.session_state.qa_pairs_file)
+                    _update_qa_counts()
+                else:
+                    st.error("❌ Q&A pairs file not found")
+
+        # Counts
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Pairs", st.session_state.qa_total_count)
+        m2.metric("Selected", st.session_state.qa_selected_count)
+        selected_pct = 0 if st.session_state.qa_total_count == 0 else (st.session_state.qa_selected_count / st.session_state.qa_total_count) * 100
+        m3.metric("Selected %", f"{selected_pct:.0f}%")
+
+        # Selection controls
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            if st.button("Select All", use_container_width=True):
+                if st.session_state.qa_pairs_df is not None:
+                    st.session_state.qa_pairs_df["Selected"] = True
+                    _update_qa_counts()
+        with c2:
+            if st.button("Deselect All", use_container_width=True):
+                if st.session_state.qa_pairs_df is not None:
+                    st.session_state.qa_pairs_df["Selected"] = False
+                    _update_qa_counts()
+        with c3:
+            if st.button("Invert Selection", use_container_width=True):
+                if st.session_state.qa_pairs_df is not None:
+                    st.session_state.qa_pairs_df["Selected"] = ~st.session_state.qa_pairs_df["Selected"].astype(bool)
+                    _update_qa_counts()
+        with c4:
+            st.write("")
+            st.write("")
+            st.caption("Use the table checkboxes to fine-tune selection")
+
+        # Editable table
+        if st.session_state.qa_pairs_df is not None and not st.session_state.qa_pairs_df.empty:
+            edited_df = st.data_editor(
+                st.session_state.qa_pairs_df,
+                use_container_width=True,
+                height=500,
+                hide_index=True,
+            )
+            # Persist edits
+            if not edited_df.equals(st.session_state.qa_pairs_df):
+                st.session_state.qa_pairs_df = edited_df
+                _update_qa_counts()
+        else:
+            st.info("Provide a valid Q&A pairs JSON path in the sidebar to load pairs.")
     
     # Footer
     st.markdown("---")
