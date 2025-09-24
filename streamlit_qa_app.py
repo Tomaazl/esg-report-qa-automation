@@ -421,8 +421,6 @@ def main():
                                     st.session_state.matched_results = matched_results
                                     st.rerun()
         
-        with col2:
-            st.header("📊 Results")
         
         if st.session_state.matched_results:
             st.success(f"✅ Processed: {st.session_state.uploaded_file_name}")

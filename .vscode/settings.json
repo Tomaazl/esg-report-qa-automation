@@ -1,0 +1,17 @@
+{
+    "azureAppService.zipIgnorePattern": [
+        "__pycache__{,/**}",
+        "*.pyc",
+        ".git{,/**}",
+        ".vscode{,/**}",
+        ".pytest_cache{,/**}",
+        "htmlcov{,/**}",
+        ".coverage",
+        ".env",
+        ".venv{,/**}",
+        "venv{,/**}",
+        "env{,/**}"
+    ],
+    "azureAppService.deploySubpath": ".",
+    "python.defaultInterpreterPath": "python"
+}
