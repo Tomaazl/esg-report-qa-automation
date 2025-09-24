@@ -33,6 +33,36 @@ def init_session_state():
         st.session_state.matched_results = None
     if 'uploaded_file_name' not in st.session_state:
         st.session_state.uploaded_file_name = None
+    # Knowledge base selection state
+    if 'qa_pairs_path' not in st.session_state:
+        st.session_state.qa_pairs_path = None
+    if 'qa_pairs_all' not in st.session_state:
+        st.session_state.qa_pairs_all = []  # list of {id, question, answer}
+    if 'qa_selected_ids' not in st.session_state:
+        st.session_state.qa_selected_ids = set()
+
+def _load_qa_pairs_for_selection(path: str):
+    """Load QA pairs from file and normalize to list of dicts with ids."""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        raw = data.get("qa_pairs", data)
+        pairs = []
+        if isinstance(raw, dict):
+            for i, (q, a) in enumerate(raw.items()):
+                if isinstance(q, str) and isinstance(a, str) and q.strip() and a.strip():
+                    pairs.append({"id": i, "question": q.strip(), "answer": a.strip()})
+        elif isinstance(raw, list):
+            for i, item in enumerate(raw):
+                if isinstance(item, dict):
+                    q = item.get("question")
+                    a = item.get("answer")
+                    if isinstance(q, str) and isinstance(a, str) and q.strip() and a.strip():
+                        pairs.append({"id": i, "question": q.strip(), "answer": a.strip()})
+        return pairs
+    except Exception as e:
+        st.error(f"❌ Error loading Q&A pairs for selection: {str(e)}")
+        return []
 
 def save_uploaded_file(uploaded_file):
     """Save uploaded file to temporary location"""
@@ -288,6 +318,13 @@ def main():
                 else:
                     qa_count = 0
                 st.info(f"📊 {qa_count} Q&A pairs available")
+
+                # Initialize or refresh selection state when path changes
+                if st.session_state.qa_pairs_path != qa_pairs_file:
+                    pairs = _load_qa_pairs_for_selection(qa_pairs_file)
+                    st.session_state.qa_pairs_all = pairs
+                    st.session_state.qa_selected_ids = set(p["id"] for p in pairs)  # default: all selected
+                    st.session_state.qa_pairs_path = qa_pairs_file
             except Exception as e:
                 st.error(f"❌ Error reading Q&A file: {str(e)}")
         else:
@@ -306,54 +343,84 @@ def main():
         - **PowerPoint** (.pptx, .ppt)
         """)
     
-    # Main content area
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.header("📤 Upload Document")
+    # Main content area organized in tabs
+    tab_process, tab_kb = st.tabs(["🔄 Process", "📚 Knowledge Base Selection"])
+
+    with tab_process:
+        col1, col2 = st.columns([1, 1])
         
-        uploaded_file = st.file_uploader(
-            "Choose a document file",
-            type=['pdf', 'xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt'],
-            help="Upload a document to extract questions from"
-        )
-        
-        if uploaded_file is not None:
-            st.success(f"📁 File uploaded: {uploaded_file.name}")
+        with col1:
+            st.header("📤 Upload Document")
             
-            # File details
-            file_details = {
-                "Filename": uploaded_file.name,
-                "File size": f"{uploaded_file.size:,} bytes",
-                "File type": uploaded_file.type
-            }
-            st.json(file_details)
+            uploaded_file = st.file_uploader(
+                "Choose a document file",
+                type=['pdf', 'xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt'],
+                help="Upload a document to extract questions from"
+            )
             
-            # Process button
-            if st.button("🚀 Process Document", type="primary"):
-                if not os.path.exists(qa_pairs_file):
-                    st.error("❌ Please ensure Q&A pairs file exists before processing")
-                else:
-                    # Save uploaded file temporarily
-                    temp_file_path = save_uploaded_file(uploaded_file)
-                    
-                    if temp_file_path:
-                        # Process document
-                        questions_data = process_document(temp_file_path, uploaded_file.name)
+            if uploaded_file is not None:
+                st.success(f"📁 File uploaded: {uploaded_file.name}")
+                
+                # File details
+                file_details = {
+                    "Filename": uploaded_file.name,
+                    "File size": f"{uploaded_file.size:,} bytes",
+                    "File type": uploaded_file.type
+                }
+                st.json(file_details)
+                
+                # Process button
+                if st.button("🚀 Process Document", type="primary"):
+                    if not os.path.exists(qa_pairs_file):
+                        st.error("❌ Please ensure Q&A pairs file exists before processing")
+                    else:
+                        # Save uploaded file temporarily
+                        temp_file_path = save_uploaded_file(uploaded_file)
                         
-                        if questions_data:
-                            st.session_state.processed_questions = questions_data
-                            st.session_state.uploaded_file_name = uploaded_file.name
+                        if temp_file_path:
+                            # Process document
+                            questions_data = process_document(temp_file_path, uploaded_file.name)
                             
-                            # Match questions to answers
-                            matched_results = match_questions_to_answers(questions_data, qa_pairs_file, top_k)
-                            
-                            if matched_results:
-                                st.session_state.matched_results = matched_results
-                                st.rerun()
-    
-    with col2:
-        st.header("📊 Results")
+                            if questions_data:
+                                st.session_state.processed_questions = questions_data
+                                st.session_state.uploaded_file_name = uploaded_file.name
+
+                                # Determine which QA pairs to use
+                                selected_ids = st.session_state.qa_selected_ids or set()
+                                all_pairs = st.session_state.qa_pairs_all or []
+                                use_all = (len(selected_ids) == len(all_pairs)) and os.path.exists(qa_pairs_file)
+
+                                selected_path = qa_pairs_file
+                                temp_selected_file = None
+                                if not use_all and len(selected_ids) > 0:
+                                    selected_pairs = [
+                                        {"question": p["question"], "answer": p["answer"]}
+                                        for p in all_pairs if p["id"] in selected_ids
+                                    ]
+                                    try:
+                                        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tmp_sel:
+                                            json.dump({"qa_pairs": selected_pairs}, tmp_sel, indent=2, ensure_ascii=False)
+                                            selected_path = tmp_sel.name
+                                            temp_selected_file = selected_path
+                                    except Exception as e:
+                                        st.error(f"❌ Failed to create temporary selected QA file: {str(e)}")
+                                        selected_path = qa_pairs_file
+                                        temp_selected_file = None
+                                
+                                # Match questions to answers using selected subset
+                                matched_results = match_questions_to_answers(questions_data, selected_path, top_k)
+                                
+                                # Clean up temporary selected file if created
+                                if temp_selected_file:
+                                    try:
+                                        os.unlink(temp_selected_file)
+                                    except Exception:
+                                        pass
+                                
+                                if matched_results:
+                                    st.session_state.matched_results = matched_results
+                                    st.rerun()
+        
         
         if st.session_state.matched_results:
             st.success(f"✅ Processed: {st.session_state.uploaded_file_name}")
@@ -503,6 +570,61 @@ def main():
         
         else:
             st.info("👆 Upload and process a document to see results here")
+
+    with tab_kb:
+        st.header("📚 Select Q&A Pairs Used for Matching")
+        if not os.path.exists(qa_pairs_file):
+            st.warning("Provide a valid knowledge base file path in the sidebar.")
+        else:
+            pairs = st.session_state.qa_pairs_all if st.session_state.qa_pairs_path == qa_pairs_file else _load_qa_pairs_for_selection(qa_pairs_file)
+            if st.session_state.qa_pairs_path != qa_pairs_file:
+                st.session_state.qa_pairs_all = pairs
+                st.session_state.qa_selected_ids = set(p["id"] for p in pairs)
+                st.session_state.qa_pairs_path = qa_pairs_file
+
+            if pairs:
+                # Build editable DataFrame with selection column
+                df = pd.DataFrame(pairs)
+                df["Selected"] = df["id"].apply(lambda x: x in st.session_state.qa_selected_ids)
+
+                st.markdown("Use the checkboxes to include/exclude pairs. By default, all are selected.")
+
+                col_btn1, col_btn2, col_btn3 = st.columns([1,1,2])
+                with col_btn1:
+                    if st.button("Select All"):
+                        st.session_state.qa_selected_ids = set(df["id"].tolist())
+                        st.rerun()
+                with col_btn2:
+                    if st.button("Clear All"):
+                        st.session_state.qa_selected_ids = set()
+                        st.rerun()
+
+                edited = st.data_editor(
+                    df[["Selected", "question", "answer", "id"]],
+                    column_config={
+                        "Selected": st.column_config.CheckboxColumn(help="Use this Q&A pair for matching"),
+                        "question": st.column_config.TextColumn(label="Question", width="medium"),
+                        "answer": st.column_config.TextColumn(label="Answer", width="large"),
+                        "id": st.column_config.Column(label="ID")
+                    },
+                    hide_index=True,
+                    disabled=["question", "answer", "id"],
+                    use_container_width=True,
+                    height=500,
+                    key="qa_pairs_editor"
+                )
+
+                # Persist selection
+                try:
+                    selected_now = set(edited.loc[edited["Selected"] == True, "id"].tolist())
+                    if selected_now != st.session_state.qa_selected_ids:
+                        st.session_state.qa_selected_ids = selected_now
+                except Exception:
+                    pass
+
+                st.caption(f"Selected {len(st.session_state.qa_selected_ids)} of {len(df)} pairs.")
+            else:
+                st.info("No Q&A pairs loaded from the provided file.")
     
     # Footer
     st.markdown("---")
