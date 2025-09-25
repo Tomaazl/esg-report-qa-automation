@@ -30,7 +30,7 @@ pip install pathlib dataclasses
 from document_question_parser import DocumentQuestionParser
 
 # Initialize the parser
-parser = DocumentQuestionParser()
+parser = DocumentQuestionParser()  # Uses AI-based parsing when available
 
 # Parse a single document
 questions = parser.parse_document("path/to/your/document.pdf")
@@ -104,7 +104,7 @@ This will:
   ],
   "metadata": {
     "total_questions": 1,
-    "extraction_method": "docling + regex patterns"
+    "extraction_method": "docling + ai-based parsing"
   }
 }
 ```

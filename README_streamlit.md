@@ -28,7 +28,7 @@ streamlit run streamlit_qa_app.py
 - File validation and preview
 
 ### 🔍 **Question Extraction**
-- Automatic question detection using AI (Docling + regex)
+- Automatic question detection using AI (Docling + Azure OpenAI) with regex fallback
 - Real-time processing progress
 - Handles complex document structures
 
@@ -87,7 +87,7 @@ streamlit run streamlit_qa_app.py
 ## 🔧 **How It Works**
 
 1. **📤 Upload**: User uploads document via web interface
-2. **🔍 Extract**: Questions automatically extracted using Docling + regex patterns
+2. **🔍 Extract**: Questions automatically extracted using Docling + AI (fallback to regex if AI unavailable)
 3. **🎯 Match**: Questions matched to Q&A knowledge base using TF-IDF similarity
 4. **📊 Display**: Results shown in interactive tables with statistics
 5. **💾 Export**: Download results as JSON or Excel files
