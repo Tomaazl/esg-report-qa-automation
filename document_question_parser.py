@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-Document Question Parser using Docling
-Parses questions from PDF, DOCX, PPTX, XLSX files and formats them like test_questions.json
+Document Question Parser using Docling + AI
+
+Parses questions from PDF, DOCX, PPTX, XLSX files and formats them like
+test_questions.json. Uses AI-based parsing (Azure OpenAI via SimpleDocumentParser)
+when available, with a graceful fallback to regex-based extraction.
 """
 
 import json
@@ -10,6 +13,15 @@ import os
 from pathlib import Path
 from typing import List, Dict, Any
 from dataclasses import dataclass
+
+# Prefer AI-based parsing when possible
+try:
+    from simple_document_parser import SimpleDocumentParser
+    AI_PARSER_AVAILABLE = True
+except Exception as _e:
+    # Keep regex fallback if AI parser cannot be initialized/imported
+    print(f"Warning: AI-based parser not available ({_e}). Will use regex fallback.")
+    AI_PARSER_AVAILABLE = False
 
 try:
     from docling.document_converter import DocumentConverter
@@ -44,34 +56,60 @@ class DocumentQuestionParser:
         else:
             self.doc_converter = None
         
-        # Question patterns - various ways questions might appear
+        # Initialize AI parser if available; keep regex patterns for fallback
+        self.ai_parser = None
+        if AI_PARSER_AVAILABLE:
+            try:
+                self.ai_parser = SimpleDocumentParser()
+            except Exception as e:
+                print(f"Warning: Failed to initialize AI parser: {e}. Falling back to regex.")
+                self.ai_parser = None
+
+        # Regex fallback patterns
         self.question_patterns = [
-            # Direct questions ending with ?
             r'([A-Z][^?]*\?)',
-            # Questions starting with question words
             r'((?:What|How|When|Where|Why|Who|Which|Does|Do|Did|Can|Could|Will|Would|Should|Is|Are|Was|Were)[^?]*\?)',
-            # Numbered questions
             r'(\d+[\.\)]\s*[^?]*\?)',
-            # Questions in quotes
             r'"([^"]*\?)"',
-            # Questions after colons
             r':\s*([^?]*\?)',
         ]
     
     def extract_questions_from_text(self, text: str, source_file: str = "") -> List[ExtractedQuestion]:
-        """Extract questions from plain text using regex patterns"""
+        """Extract questions from plain text using AI if available, otherwise regex fallback"""
+        # Prefer AI-based extraction for better accuracy
+        if self.ai_parser is not None:
+            cleaned_text = self._clean_text(text)
+            try:
+                esg_questions = self.ai_parser.extract_esg_questions_with_ai(cleaned_text, deployment="esg-qa")
+            except Exception as e:
+                print(f"Warning: AI extraction failed: {e}. Falling back to regex.")
+                esg_questions = []
+
+            if esg_questions:
+                results: List[ExtractedQuestion] = []
+                for idx, esg_q in enumerate(esg_questions, start=1):
+                    q_text = str(getattr(esg_q, "question", "")).strip()
+                    if not q_text:
+                        continue
+                    results.append(
+                        ExtractedQuestion(
+                            id=idx,
+                            question=q_text if q_text.endswith("?") else (q_text + "?"),
+                            source_file=source_file,
+                            confidence=float(getattr(esg_q, "confidence", 1.0))
+                        )
+                    )
+                return results
+
+        # Regex fallback if AI path not available or returned nothing
         questions = []
         question_id = 1
-        
-        # Clean the text
         text = self._clean_text(text)
-        
         for pattern in self.question_patterns:
             matches = re.findall(pattern, text, re.IGNORECASE | re.MULTILINE)
             for match in matches:
                 cleaned_question = self._clean_question(match)
                 if self._is_valid_question(cleaned_question):
-                    # Check for duplicates
                     if not any(q.question.lower() == cleaned_question.lower() for q in questions):
                         questions.append(ExtractedQuestion(
                             id=question_id,
@@ -79,7 +117,6 @@ class DocumentQuestionParser:
                             source_file=source_file
                         ))
                         question_id += 1
-        
         return questions
     
     def _clean_text(self, text: str) -> str:
@@ -152,7 +189,7 @@ class DocumentQuestionParser:
             # Export to markdown for better text structure
             doc_text = conv_result.document.export_to_markdown()
             
-            # Extract questions from the text
+            # Extract questions from the text (AI preferred, regex fallback)
             questions = self.extract_questions_from_text(doc_text, str(file_path))
             
             print(f"Found {len(questions)} questions in {file_path.name}")
@@ -209,7 +246,7 @@ class DocumentQuestionParser:
             ],
             "metadata": {
                 "total_questions": len(questions),
-                "extraction_method": "docling + regex patterns"
+                "extraction_method": "docling + ai-based parsing" if self.ai_parser is not None else "docling + regex patterns"
             }
         }
         
